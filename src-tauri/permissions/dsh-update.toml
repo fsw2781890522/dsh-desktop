@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "allow-dsh-check-update"
+description = "Allows fetching the desktop update channel index"
+commands.allow = ["dsh_check_update"]
+
+[[permission]]
+identifier = "allow-dsh-install-update"
+description = "Allows downloading a published installer, verifying it, and launching it"
+commands.allow = ["dsh_install_update"]

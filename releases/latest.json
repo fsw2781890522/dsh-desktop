@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "latest": "0.2.0",
+  "releases": [
+    {
+      "version": "0.2.0",
+      "releasedAt": "2026-08-16T00:00:00Z",
+      "notes": {
+        "zh": "第一个可在设置中检查更新的桌面版本。安装包按 releases/<version>/ 保存，不再覆盖上一版。用户数据仍在 ~/.dsh。",
+        "en": "First desktop build that can check for updates from Settings. Installers live under releases/<version>/ instead of overwriting the previous file. User data stays in ~/.dsh."
+      },
+      "artifacts": {}
+    }
+  ]
+}

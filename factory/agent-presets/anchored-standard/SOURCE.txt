@@ -1,0 +1,7 @@
+Vendored from https://github.com/xiaobright/dsh-anchored-standard
+commit f57a1bde2dbaba3039bdae8631f78a0cb3ae3ebe
+source directory: preset/
+
+Community preset. Not affiliated with or endorsed by DeepSeek.
+Composition files (agent.cordis.yml and *.mjs) are copied unchanged.
+preset.yml display text is localized for this desktop factory default.

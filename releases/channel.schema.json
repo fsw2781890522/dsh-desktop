@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://deepseek.com/dsh-desktop/update-channel.schema.json",
+  "title": "DeepSeek Harness desktop update channel",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "channel", "latest", "releases"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "channel": { "type": "string", "minLength": 1 },
+    "latest": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "releases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/release" }
+    }
+  },
+  "$defs": {
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "notes"],
+      "properties": {
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "releasedAt": { "type": "string" },
+        "notes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["zh", "en"],
+          "properties": {
+            "zh": { "type": "string" },
+            "en": { "type": "string" }
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "windows-x64": { "$ref": "#/$defs/artifact" }
+          }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "filename", "url", "sha256", "size"],
+      "properties": {
+        "kind": { "enum": ["nsis", "runtime-zip"] },
+        "filename": { "type": "string", "minLength": 1 },
+        "url": { "type": "string" },
+        "sha256": { "type": "string" },
+        "size": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+target/
+src-tauri/target/
+src-tauri/gen/
+bundle-runtime/
+bundle-runtime.zip
+releases/**/*.exe
+releases/**/*.zip
+releases/**/*.tmp
