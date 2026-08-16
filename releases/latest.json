@@ -14,7 +14,7 @@
         "windows-x64": {
           "kind": "nsis",
           "filename": "DeepSeek Harness_0.2.0_x64-setup.exe",
-          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.0/DeepSeek%20Harness_0.2.0_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.0/DeepSeek.Harness_0.2.0_x64-setup.exe",
           "sha256": "486799dc5cb6aa7aa96e4bdc10bdcd6e98283264f9a7540f8713e411b75f9189",
           "size": 102658606
         }
