@@ -1,8 +1,25 @@
 {
   "schemaVersion": 1,
   "channel": "stable",
-  "latest": "0.2.1",
+  "latest": "0.2.2",
   "releases": [
+    {
+      "version": "0.2.2",
+      "releasedAt": "2026-08-16T14:08:45Z",
+      "notes": {
+        "zh": "首次启动改为解到临时目录，先结束残留的 bundle-runtime/node.exe，再替换运行时目录，避免 Windows tar 被孤儿 Node 进程挡住。",
+        "en": "First-launch unpack extracts into a staging directory, stops a leftover bundle-runtime/node.exe, then replaces the runtime folder so Windows tar is not blocked by an orphan Node process."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.2.2_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.2/DeepSeek.Harness_0.2.2_x64-setup.exe",
+          "sha256": "c42c61517c90bccf9d65d1db6edca80e351066dab44fae7e2f6a73743c0a3109",
+          "size": 103064152
+        }
+      }
+    },
     {
       "version": "0.2.1",
       "releasedAt": "2026-08-16T13:26:37Z",

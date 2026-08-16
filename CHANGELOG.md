@@ -2,6 +2,10 @@
 
 All notable desktop-shell releases are recorded here. The running app reads the same notes from `releases/latest.json`.
 
+## 0.2.2 — 2026-08-16
+
+- First-launch unpack extracts into a staging directory, stops a leftover `bundle-runtime/node.exe`, then replaces the runtime folder so Windows `tar` is not blocked by an orphan Node process.
+
 ## 0.2.1 — 2026-08-16
 
 - Check for updates uses the same direct-then-proxy HTTP path as the harness (`127.0.0.1:{port}`, default 7897). This does not enable agent web tools.
