@@ -7,3 +7,9 @@ bundle-runtime.zip
 releases/**/*.exe
 releases/**/*.zip
 releases/**/*.tmp
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
