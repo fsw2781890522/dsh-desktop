@@ -4,9 +4,10 @@
 mod update;
 
 use std::{
+    ffi::OsString,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver},
@@ -15,7 +16,9 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder,
+};
 
 /// State shared between the server watcher and the app lifecycle.
 /// All fields sit behind `Arc` so a clone of the struct is a cheap, owned,
@@ -100,8 +103,7 @@ const RUNTIME_STAMP_NAME: &str = ".dsh-desktop-runtime-stamp";
 const DSH_BIN_REL: &str = "node_modules/@deepseek-ai/dsh/lib/bin.js";
 /// Completeness probe: `commander` is a direct dependency of `@deepseek-ai/dsh`.
 /// A truncated installer extract omits it while still leaving `bin.js` in place.
-const COMMANDER_REL: &str =
-    "node_modules/@deepseek-ai/dsh/node_modules/commander/package.json";
+const COMMANDER_REL: &str = "node_modules/@deepseek-ai/dsh/node_modules/commander/package.json";
 
 /// Tauri's `resource_dir()` returns `\\?\`-prefixed verbatim paths on
 /// Windows; child processes (node, tar) reject those.
@@ -177,26 +179,126 @@ fn parent_is_writable(dir: &Path) -> bool {
     ok
 }
 
+fn staging_path(dest: &Path) -> PathBuf {
+    dest.with_file_name(format!(
+        "{}.extracting",
+        dest.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(RUNTIME_DIR_NAME)
+    ))
+}
+
+fn tar_program() -> PathBuf {
+    #[cfg(windows)]
+    {
+        let system_root =
+            std::env::var_os("SystemRoot").unwrap_or_else(|| OsString::from(r"C:\Windows"));
+        let system32 = PathBuf::from(system_root).join("System32").join("tar.exe");
+        if system32.is_file() {
+            return system32;
+        }
+    }
+    PathBuf::from("tar")
+}
+
+fn format_tar_error(status: ExitStatus, stderr: &str) -> String {
+    let header = format!("tar failed to unpack the DeepSeek Harness runtime ({status})");
+    let stderr = stderr.trim();
+    if stderr.is_empty() {
+        header
+    } else {
+        format!("{header}\n{stderr}")
+    }
+}
+
+/// Stop a leftover `dest\node.exe` so the unpacked tree can replace it.
+///
+/// A crashed or uninstalled desktop instance can leave the bundled server
+/// running. Windows tar then fails with `Can't unlink already-existing object:
+/// Permission denied` on `./node.exe` (the first zip member) and never writes
+/// the stamp, even if the rest of the tree extracted.
+fn stop_runtime_node(dest: &Path) {
+    let node = normalize_path(&dest.join("node.exe"));
+    if !node.is_file() {
+        return;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let path = node.to_string_lossy().into_owned();
+        let mut command = Command::new("powershell.exe");
+        command.creation_flags(0x0800_0000);
+        let _ = command
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $env:DSH_RUNTIME_NODE } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+            ])
+            .env("DSH_RUNTIME_NODE", path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        std::thread::sleep(Duration::from_millis(400));
+    }
+}
+
+fn remove_dir_retry(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut last = None;
+    for _ in 0..8 {
+        match std::fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(_) if !path.exists() => return Ok(()),
+            Err(e) => {
+                last = Some(e);
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        }
+    }
+    Err(format!(
+        "failed to replace the runtime directory: {}",
+        last.map(|e| e.to_string())
+            .unwrap_or_else(|| "unknown error".into())
+    ))
+}
+
+/// Unpack `bundle-runtime.zip` into a fresh sibling directory, then replace
+/// `dest`. Extracting onto a dirty tree fails when leftover `node.exe` is
+/// still running; a staging directory keeps tar off that lock.
 fn extract_zip(zip: &Path, dest: &Path) -> Result<(), String> {
-    std::fs::create_dir_all(dest)
+    let staging = staging_path(dest);
+    if staging.exists() {
+        remove_dir_retry(&staging)?;
+    }
+    std::fs::create_dir_all(&staging)
         .map_err(|e| format!("failed to create the runtime directory: {e}"))?;
-    let mut command = Command::new("tar");
+
+    let mut command = Command::new(tar_program());
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
     let zip_arg = zip.to_string_lossy();
-    let dest_arg = dest.to_string_lossy();
-    let status = command
-        .args(["-xf", zip_arg.as_ref(), "-C", dest_arg.as_ref()])
-        .status()
+    let staging_arg = staging.to_string_lossy();
+    let output = command
+        .args(["-xf", zip_arg.as_ref(), "-C", staging_arg.as_ref()])
+        .output()
         .map_err(|e| format!("failed to start tar to unpack the runtime: {e}"))?;
-    if !status.success() {
-        return Err(format!(
-            "tar failed to unpack the DeepSeek Harness runtime ({status})"
-        ));
+    if !output.status.success() {
+        let _ = std::fs::remove_dir_all(&staging);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format_tar_error(output.status, &stderr));
     }
+
+    stop_runtime_node(dest);
+    remove_dir_retry(dest)?;
+    std::fs::rename(&staging, dest)
+        .map_err(|e| format!("failed to replace the runtime directory: {e}"))?;
     Ok(())
 }
 
@@ -348,7 +450,9 @@ fn spawn_server(node: &Path, bin: &Path) -> Result<(Child, Receiver<Result<u16, 
 fn wait_for_port(rx: Receiver<Result<u16, String>>, timeout: Duration) -> Result<u16, String> {
     match rx.recv_timeout(timeout) {
         Ok(Ok(port)) => Ok(port),
-        Ok(Err(message)) => Err(format!("the DeepSeek Harness server failed to start:\n{message}")),
+        Ok(Err(message)) => Err(format!(
+            "the DeepSeek Harness server failed to start:\n{message}"
+        )),
         Err(mpsc::RecvTimeoutError::Timeout) => {
             Err("timed out waiting for the DeepSeek Harness server to become ready".to_string())
         }
@@ -508,22 +612,23 @@ fn main() {
             }
 
             // Splash window while the server boots.
-            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("DeepSeek Harness")
-                .inner_size(1280.0, 820.0)
-                .min_inner_size(900.0, 560.0)
-                .center()
-                .decorations(false)
-                .shadow(true)
-                .initialization_script(INIT_SCRIPT)
-                .initialization_script(DESKTOP_CHROME_SCRIPT)
-                .initialization_script(desktop_bridge_script())
-                .on_navigation({
-                    let handle = app.handle().clone();
-                    move |url| allow_navigation(&handle, url)
-                })
-                .build()
-                .map_err(|e| e.to_string())?;
+            let window =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .title("DeepSeek Harness")
+                    .inner_size(1280.0, 820.0)
+                    .min_inner_size(900.0, 560.0)
+                    .center()
+                    .decorations(false)
+                    .shadow(true)
+                    .initialization_script(INIT_SCRIPT)
+                    .initialization_script(DESKTOP_CHROME_SCRIPT)
+                    .initialization_script(desktop_bridge_script())
+                    .on_navigation({
+                        let handle = app.handle().clone();
+                        move |url| allow_navigation(&handle, url)
+                    })
+                    .build()
+                    .map_err(|e| e.to_string())?;
 
             // Unpack the runtime if needed, start the server, navigate to it.
             {
@@ -562,9 +667,8 @@ fn main() {
                             match Url::parse(&target) {
                                 Ok(url) => {
                                     if window.navigate(url).is_err() {
-                                        let _ = window.eval(&format!(
-                                            "window.location.replace({target:?});"
-                                        ));
+                                        let _ = window
+                                            .eval(&format!("window.location.replace({target:?});"));
                                     }
                                     state.ready.store(true, Ordering::SeqCst);
                                 }
@@ -595,4 +699,121 @@ fn main() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unique_temp(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "dsh-desktop-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    }
+
+    fn write_runtime_tree(root: &Path, node_contents: &[u8]) {
+        std::fs::create_dir_all(root.join("node_modules/@deepseek-ai/dsh/lib")).unwrap();
+        std::fs::create_dir_all(root.join("node_modules/@deepseek-ai/dsh/node_modules/commander"))
+            .unwrap();
+        std::fs::write(root.join("node.exe"), node_contents).unwrap();
+        std::fs::write(root.join(DSH_BIN_REL), b"bin").unwrap();
+        std::fs::write(root.join(COMMANDER_REL), b"{}").unwrap();
+    }
+
+    fn pack_zip(src: &Path, zip: &Path) {
+        let status = Command::new(tar_program())
+            .args(["-a", "-cf"])
+            .arg(zip)
+            .arg("-C")
+            .arg(src)
+            .arg(".")
+            .status()
+            .unwrap();
+        assert!(status.success(), "failed to pack test zip");
+    }
+
+    #[test]
+    fn staging_path_uses_extracting_suffix() {
+        let dest = PathBuf::from(r"C:\Users\admin\AppData\Local\DeepSeek Harness\bundle-runtime");
+        assert_eq!(
+            staging_path(&dest),
+            PathBuf::from(
+                r"C:\Users\admin\AppData\Local\DeepSeek Harness\bundle-runtime.extracting"
+            )
+        );
+    }
+
+    #[test]
+    fn tar_error_includes_stderr_from_locked_unlink() {
+        let status = Command::new("cmd")
+            .args(["/c", "exit", "1"])
+            .status()
+            .unwrap();
+        let msg = format_tar_error(
+            status,
+            "./node.exe: Can't unlink already-existing object: Permission denied\n",
+        );
+        assert!(msg.contains("exit code: 1"));
+        assert!(msg.contains("Can't unlink already-existing object: Permission denied"));
+    }
+
+    #[test]
+    fn extract_zip_replaces_a_dirty_dest() {
+        let tmp = unique_temp("extract-dirty");
+        let src = tmp.join("src");
+        let dest = tmp.join("bundle-runtime");
+        write_runtime_tree(&src, b"new-node");
+        write_runtime_tree(&dest, b"old-node");
+        let zip = tmp.join("bundle-runtime.zip");
+        pack_zip(&src, &zip);
+        extract_zip(&zip, &dest).unwrap();
+        assert_eq!(std::fs::read(dest.join("node.exe")).unwrap(), b"new-node");
+        assert!(runtime_complete(&dest));
+        assert!(!staging_path(&dest).exists());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn extract_zip_replaces_dest_with_locked_node_exe() {
+        use std::os::windows::process::CommandExt;
+
+        let tmp = unique_temp("extract-locked");
+        let src = tmp.join("src");
+        let dest = tmp.join("bundle-runtime");
+        write_runtime_tree(&src, b"new-node");
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::copy(r"C:\Windows\System32\cmd.exe", dest.join("node.exe")).unwrap();
+        let mut locker = Command::new(dest.join("node.exe"));
+        locker.creation_flags(0x0800_0000);
+        let child = locker
+            .args(["/c", "ping", "-n", "40", "127.0.0.1"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        let zip = tmp.join("bundle-runtime.zip");
+        pack_zip(&src, &zip);
+        let pid = child.id();
+        let result = extract_zip(&zip, &dest);
+        if result.is_err() {
+            let _ = Command::new("taskkill")
+                .args(["/F", "/PID", &pid.to_string()])
+                .creation_flags(0x0800_0000)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+        result.unwrap();
+        assert_eq!(std::fs::read(dest.join("node.exe")).unwrap(), b"new-node");
+        assert!(runtime_complete(&dest));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }
