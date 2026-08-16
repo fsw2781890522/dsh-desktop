@@ -40,6 +40,12 @@ struct ServerState {
 const SERVER_DIED_EVENT: &str = "dsh-server-died";
 /// Emitted by the boot thread when the server fails to become ready.
 const SERVER_START_FAILED_EVENT: &str = "dsh-server-start-failed";
+/// Emitted by the boot thread so the splash can explain the current startup phase.
+const SERVER_BOOT_STATUS_EVENT: &str = "dsh-server-boot-status";
+
+fn emit_boot_status(app: &AppHandle, text: &str) {
+    let _ = app.emit(SERVER_BOOT_STATUS_EVENT, text);
+}
 
 /// Init script injected into every page: routes `target="_blank"` anchors and
 /// `window.open` through the `dsh-ext://` scheme so the Rust side can open
@@ -309,6 +315,7 @@ fn extract_zip(zip: &Path, dest: &Path) -> Result<(), String> {
 /// launch, or into the app local data directory when the resource dir is not
 /// writable. `tauri dev` has no zip and uses the unpacked `bundle-runtime/`.
 fn ensure_runtime(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
+    emit_boot_status(app, "正在检查运行时…");
     if let Some(zip) = find_zip(app) {
         let alongside = zip
             .parent()
@@ -327,6 +334,7 @@ fn ensure_runtime(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
         let expected = zip_stamp(&zip);
         let current = std::fs::read_to_string(&stamp_path).unwrap_or_default();
         if current.trim() != expected || !runtime_complete(&dest) {
+            emit_boot_status(app, "正在解压运行时…");
             extract_zip(&zip, &dest)?;
             std::fs::write(&stamp_path, &expected)
                 .map_err(|e| format!("failed to write the runtime stamp: {e}"))?;
@@ -644,6 +652,7 @@ fn main() {
                         if state.exiting.load(Ordering::SeqCst) {
                             return Err("the app is closing".to_string());
                         }
+                        emit_boot_status(&handle, "正在启动本地服务…");
                         let (child, rx) = spawn_server(&node, &bin)?;
                         {
                             let mut guard = state
@@ -658,11 +667,13 @@ fn main() {
                             }
                             *guard = Some(child);
                         }
+                        emit_boot_status(&handle, "正在等待本地服务就绪…");
                         wait_for_port(rx, Duration::from_secs(120))
                     })();
                     state.starting.store(false, Ordering::SeqCst);
                     match boot {
                         Ok(port) => {
+                            emit_boot_status(&handle, "正在打开工作区…");
                             let target = format!("http://127.0.0.1:{port}/");
                             match Url::parse(&target) {
                                 Ok(url) => {
