@@ -36,8 +36,9 @@ $url = "file:///" + ($full -replace '\\', '/')
 $releasedAt = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 
 $indexPath = Join-Path $root "releases\latest.json"
+$utf8 = New-Object System.Text.UTF8Encoding $false
 if (Test-Path -LiteralPath $indexPath) {
-    $index = Get-Content -Raw -LiteralPath $indexPath | ConvertFrom-Json
+    $index = [System.IO.File]::ReadAllText($indexPath, $utf8) | ConvertFrom-Json
 } else {
     $index = [pscustomobject]@{
         schemaVersion = 1
@@ -54,7 +55,7 @@ if (-not $NotesZh -or -not $NotesEn) {
         if (-not $NotesEn) { $NotesEn = [string]$existing.notes.en }
     }
 }
-if (-not $NotesZh) { $NotesZh = "DeepSeek Harness 桌面 $Version。" }
+if (-not $NotesZh) { $NotesZh = "DeepSeek Harness desktop $Version." }
 if (-not $NotesEn) { $NotesEn = "DeepSeek Harness desktop $Version." }
 
 $entry = [pscustomobject]@{
@@ -79,7 +80,7 @@ $index.schemaVersion = 1
 if (-not $index.channel) { $index.channel = "stable" }
 
 $json = $index | ConvertTo-Json -Depth 8
-Set-Content -LiteralPath $indexPath -Value ($json.TrimEnd() + "`n") -Encoding utf8
+[System.IO.File]::WriteAllText($indexPath, ($json.TrimEnd() + "`n"), $utf8)
 Write-Host "published $Version -> $destExe"
 Write-Host "sha256 $hash"
 Write-Host "index $indexPath"
