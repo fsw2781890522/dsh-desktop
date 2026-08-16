@@ -1,8 +1,25 @@
 {
   "schemaVersion": 1,
   "channel": "stable",
-  "latest": "0.2.0",
+  "latest": "0.2.1",
   "releases": [
+    {
+      "version": "0.2.1",
+      "releasedAt": "2026-08-16T13:26:37Z",
+      "notes": {
+        "zh": "「检查更新」直连失败后走本地 HTTP 代理（默认 7897）。设置里可改代理端口。这不会启用 agent 的 web 工具。",
+        "en": "Check for updates retries through the local HTTP proxy (default 7897) after a direct failure. Settings can change the port. This does not enable agent web tools."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.2.1_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.1/DeepSeek.Harness_0.2.1_x64-setup.exe",
+          "sha256": "b8e89009b8d5829bf720913568102a1f9710d82e9fef209eb7096c3e551376ed",
+          "size": 103055134
+        }
+      }
+    },
     {
       "version": "0.2.0",
       "releasedAt": "2026-08-16T12:10:00Z",
