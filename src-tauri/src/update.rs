@@ -358,11 +358,177 @@ fn read_bytes(source: &str) -> Result<Vec<u8>, String> {
     http_get(source)
 }
 
+const DEFAULT_PROXY_PORT: u16 = 7897;
+const PROXY_PORT_ENV: &str = "DSH_PROXY_PORT";
+const PROXY_URL_ENV: &str = "DSH_PROXY_URL";
+
+fn dsh_home() -> PathBuf {
+    if let Ok(home) = std::env::var("DSH_HOME") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    let user = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+    PathBuf::from(user.unwrap_or_default()).join(".dsh")
+}
+
+fn strip_yaml_comment(line: &str) -> String {
+    let mut out = String::new();
+    let mut in_quote = false;
+    for ch in line.chars() {
+        if ch == '"' {
+            in_quote = !in_quote;
+        }
+        if ch == '#' && !in_quote {
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn unquote_yaml(value: &str) -> String {
+    let value = value.trim();
+    if value.len() >= 2
+        && ((value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\'')))
+    {
+        return value[1..value.len() - 1].to_string();
+    }
+    value.to_string()
+}
+
+fn parse_port_str(value: &str) -> Option<u16> {
+    value.parse().ok().filter(|port| (1..=65535).contains(port))
+}
+
+/// Read `http-proxy.port` from a user-settings document.
+pub(crate) fn parse_http_proxy_port_yaml(text: &str) -> Option<u16> {
+    let mut in_section = false;
+    for raw in text.lines() {
+        let indent = raw.len() - raw.trim_start().len();
+        let trimmed = strip_yaml_comment(raw).trim().to_string();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if indent == 0 {
+            in_section = trimmed == "http-proxy:" || trimmed.starts_with("http-proxy:");
+            if let Some(rest) = trimmed.strip_prefix("http-proxy:") {
+                let rest = rest.trim();
+                if rest.starts_with('{') {
+                    if let Some(port) = rest.split("port:").nth(1) {
+                        let token = port
+                            .trim()
+                            .trim_start_matches('{')
+                            .trim_end_matches('}')
+                            .split([',', ' ', '}'])
+                            .next()
+                            .unwrap_or("");
+                        return parse_port_str(&unquote_yaml(token));
+                    }
+                }
+            }
+            continue;
+        }
+        if in_section {
+            if let Some(value) = trimmed.strip_prefix("port:") {
+                return parse_port_str(&unquote_yaml(value));
+            }
+        }
+    }
+    None
+}
+
+pub(crate) fn parse_proxy_url_port(value: &str) -> Option<u16> {
+    let after_scheme = value.trim().split_once("://")?.1;
+    let hostport = after_scheme.split('/').next()?;
+    let port = if hostport.starts_with('[') {
+        hostport.rsplit_once("]:")?.1
+    } else {
+        hostport.rsplit_once(':')?.1
+    };
+    parse_port_str(port)
+}
+
+pub(crate) fn resolve_proxy_port(
+    env_port: Option<&str>,
+    env_url: Option<&str>,
+    settings_yaml: Option<&str>,
+) -> u16 {
+    if let Some(port) = env_port.and_then(parse_port_str) {
+        return port;
+    }
+    if let Some(port) = env_url.and_then(parse_proxy_url_port) {
+        return port;
+    }
+    if let Some(port) = settings_yaml.and_then(parse_http_proxy_port_yaml) {
+        return port;
+    }
+    DEFAULT_PROXY_PORT
+}
+
+fn live_proxy_port() -> u16 {
+    let yaml = std::fs::read_to_string(dsh_home().join("settings.yaml")).ok();
+    resolve_proxy_port(
+        std::env::var(PROXY_PORT_ENV).ok().as_deref(),
+        std::env::var(PROXY_URL_ENV).ok().as_deref(),
+        yaml.as_deref(),
+    )
+}
+
+pub(crate) fn is_loopback_http_url(url: &str) -> bool {
+    let Some((_, rest)) = url.split_once("://") else {
+        return false;
+    };
+    let hostport = rest.split('/').next().unwrap_or(rest);
+    let host = if hostport.starts_with('[') {
+        hostport
+            .trim_start_matches('[')
+            .split(']')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+    } else {
+        hostport
+            .rsplit_once(':')
+            .map(|(h, _)| h.to_string())
+            .unwrap_or_else(|| hostport.to_string())
+            .to_ascii_lowercase()
+    };
+    matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
+}
+
+fn http_call(url: &str, proxy_timeout: Duration) -> Result<ureq::Response, String> {
+    let direct = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(5))
+        .timeout(Duration::from_secs(8))
+        .build();
+    match direct.get(url).call() {
+        Ok(response) => Ok(response),
+        Err(direct_err) => {
+            if is_loopback_http_url(url) {
+                return Err(format!("failed to fetch {url}: {direct_err}"));
+            }
+            let port = live_proxy_port();
+            let proxy = ureq::Proxy::new(&format!("http://127.0.0.1:{port}"))
+                .map_err(|e| format!("invalid HTTP proxy on port {port}: {e}"))?;
+            let agent = ureq::AgentBuilder::new()
+                .proxy(proxy)
+                .timeout_connect(Duration::from_secs(10))
+                .timeout(proxy_timeout)
+                .build();
+            agent.get(url).call().map_err(|proxy_err| {
+                format!(
+                    "failed to fetch {url}: {direct_err}; proxy http://127.0.0.1:{port} also failed: {proxy_err}"
+                )
+            })
+        }
+    }
+}
+
 fn http_get(url: &str) -> Result<Vec<u8>, String> {
-    let response = ureq::get(url)
-        .timeout(Duration::from_secs(60))
-        .call()
-        .map_err(|e| format!("failed to fetch {url}: {e}"))?;
+    let response = http_call(url, Duration::from_secs(60))?;
     let mut bytes = Vec::new();
     response
         .into_reader()
@@ -395,10 +561,7 @@ fn download_verified(
         verify_and_write(app, &bytes, expected_sha256, dest)?;
         return Ok(());
     }
-    let response = ureq::get(source)
-        .timeout(Duration::from_secs(600))
-        .call()
-        .map_err(|e| format!("failed to download {source}: {e}"))?;
+    let response = http_call(source, Duration::from_secs(600))?;
     let total = response
         .header("Content-Length")
         .and_then(|value| value.parse::<u64>().ok());
@@ -625,5 +788,38 @@ mod tests {
             sha256_hex(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+
+    #[test]
+    fn resolve_proxy_port_prefers_env_then_url_then_yaml_then_default() {
+        assert_eq!(
+            resolve_proxy_port(Some("8888"), Some("http://127.0.0.1:1"), Some("http-proxy:\n  port: 2\n")),
+            8888
+        );
+        assert_eq!(
+            resolve_proxy_port(None, Some("http://127.0.0.1:9050"), Some("http-proxy:\n  port: 2\n")),
+            9050
+        );
+        assert_eq!(
+            resolve_proxy_port(None, None, Some("ui-theme:\n  preference: dark\nhttp-proxy:\n  port: 8118 # clash\n")),
+            8118
+        );
+        assert_eq!(
+            resolve_proxy_port(None, None, Some("http-proxy: { port: 1234 }\n")),
+            1234
+        );
+        assert_eq!(resolve_proxy_port(Some("nope"), None, None), DEFAULT_PROXY_PORT);
+        assert_eq!(resolve_proxy_port(None, None, None), DEFAULT_PROXY_PORT);
+        assert_eq!(parse_proxy_url_port("http://[::1]:7897/"), Some(7897));
+        assert_eq!(parse_http_proxy_port_yaml("http-proxy:\n  port: \"9050\"\n"), Some(9050));
+    }
+
+    #[test]
+    fn loopback_http_urls_skip_the_proxy() {
+        assert!(is_loopback_http_url("http://127.0.0.1:3080/latest.json"));
+        assert!(is_loopback_http_url("https://localhost/x"));
+        assert!(is_loopback_http_url("http://[::1]:9/"));
+        assert!(!is_loopback_http_url("https://raw.githubusercontent.com/x"));
+        assert!(!is_loopback_http_url("not-a-url"));
     }
 }

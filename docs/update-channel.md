@@ -49,6 +49,10 @@ Rules:
 
 An empty configuration is an error shown in Settings, not a silent skip.
 
+## Proxy fallback
+
+Discovery and installer download use the same direct-then-proxy rule as `@deepseek-ai/dsh-http-proxy`. Direct connect is budgeted at five seconds (eight seconds overall); a transport failure retries through `http://127.0.0.1:{port}`. The port is `DSH_PROXY_PORT`, then the port in `DSH_PROXY_URL`, then `http-proxy.port` in `$DSH_HOME/settings.yaml` or `%USERPROFILE%\.dsh\settings.yaml`, then `7897`. Loopback and `file:` sources do not use the proxy. This is product HTTP: it does not register or enable `web_search` / `web_fetch` / `tool-web`.
+
 ## Publishing a version
 
 `scripts/build.ps1` runs `scripts/publish-release.ps1` after a successful NSIS build. That script copies the installer into `releases/<version>/`, writes `SHA256SUMS`, and upserts that version in `latest.json`. It never deletes another version's directory. Installer binaries stay out of git; `latest.json`, notes, and checksums are tracked.

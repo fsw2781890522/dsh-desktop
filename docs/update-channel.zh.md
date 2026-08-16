@@ -49,6 +49,10 @@
 
 配置为空时，设置里显示错误，而不是静默跳过。
 
+## 代理回退
+
+发现与安装包下载使用与 `@deepseek-ai/dsh-http-proxy` 相同的直连再代理规则。直连连接预算五秒（总共八秒）；传输失败后经 `http://127.0.0.1:{port}` 重试。端口来自 `DSH_PROXY_PORT`，然后是 `DSH_PROXY_URL` 中的端口，然后是 `$DSH_HOME/settings.yaml` 或 `%USERPROFILE%\.dsh\settings.yaml` 里的 `http-proxy.port`，最后是 `7897`。回环和 `file:` 源不走代理。这是产品 HTTP：它不注册也不启用 `web_search` / `web_fetch` / `tool-web`。
+
 ## 发布一个版本
 
 `scripts/build.ps1` 在 NSIS 构建成功后运行 `scripts/publish-release.ps1`。该脚本把安装包拷进 `releases/<version>/`，写入 `SHA256SUMS`，并在 `latest.json` 中 upsert 该版本。它从不删除其他版本的目录。安装包二进制不进 git；`latest.json`、说明和校验和纳入跟踪。
