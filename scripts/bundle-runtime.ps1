@@ -27,15 +27,32 @@ function Install-FactoryPresets {
     if (-not (Test-Path -LiteralPath $shipped)) {
         throw "shipped preset root missing: $shipped"
     }
+    $factoryCustomRoot = Join-Path $DshPackageRoot "config\agent-presets-custom"
+    $factoryCustomIds = @("anchored-standard")
     Get-ChildItem -LiteralPath $factoryRoot -Directory | ForEach-Object {
-        $dest = Join-Path $shipped $_.Name
+        $isFactoryCustom = $factoryCustomIds -contains $_.Name
+        $destinationRoot = if ($isFactoryCustom) { $factoryCustomRoot } else { $shipped }
+        if (-not (Test-Path -LiteralPath $destinationRoot)) {
+            New-Item -ItemType Directory -Force -Path $destinationRoot | Out-Null
+        }
+        $dest = Join-Path $destinationRoot $_.Name
         if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
         Copy-Item -Recurse -LiteralPath $_.FullName -Destination $dest
+        if ($isFactoryCustom) {
+            # Remove the old system-root copy left by 0.2.2 and earlier
+            # bundles; otherwise discovery would win it before the custom
+            # root and the preset would stay in the Built-in section.
+            $legacyDest = Join-Path $shipped $_.Name
+            if (Test-Path -LiteralPath $legacyDest) {
+                Remove-Item -LiteralPath $legacyDest -Recurse -Force
+            }
+        }
         $composition = Join-Path $dest "agent.cordis.yml"
         if (-not (Test-Path -LiteralPath $composition)) {
             throw "factory preset $($_.Name) has no agent.cordis.yml"
         }
-        Write-Host "factory preset: $($_.Name) -> $dest"
+        $trustLabel = if ($isFactoryCustom) { "custom" } else { "system" }
+        Write-Host "factory preset ($trustLabel): $($_.Name) -> $dest"
     }
 
     $webPatch = Join-Path $DshPackageRoot "node_modules\@deepseek-ai\dsh-web-app\cordis.patch.yml"

@@ -1,8 +1,25 @@
 {
   "schemaVersion": 1,
   "channel": "stable",
-  "latest": "0.2.2",
+  "latest": "0.2.3",
   "releases": [
+    {
+      "version": "0.2.3",
+      "releasedAt": "2026-08-16T18:48:42Z",
+      "notes": {
+        "zh": "选择 session 后一次性加载完整历史，移除「加载更早」；prompt 导航收录 steering/插话并使用独立悬浮胶囊，设置面板保持最高层级，侧边栏在浅色/深色主题下使用 60% 语义底色与 40% 背景采样的毛玻璃效果；Anchored Standard 作为默认模式归入自定义。",
+        "en": "Sessions now open with complete history and no Load earlier control; prompt navigation includes steering/interjection prompts in an independent floating capsule, Settings stays topmost, the sidebar uses a 60% semantic fill with 40% light/dark glass sampling, and Anchored Standard remains the default under Custom."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.2.3_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.3/DeepSeek.Harness_0.2.3_x64-setup.exe",
+          "sha256": "7e56cad34dfe95a09d0d7eb6b9a15d9e1ce98790c06d420006404e80973e7820",
+          "size": 103070172
+        }
+      }
+    },
     {
       "version": "0.2.2",
       "releasedAt": "2026-08-16T17:13:04Z",
