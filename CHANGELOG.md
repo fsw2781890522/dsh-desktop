@@ -11,6 +11,7 @@ All notable desktop-shell releases are recorded here. The running app reads the 
 - Removed the session-list bottom fade that obscured content; native Acrylic is reapplied after focus loss and the sidebar glass remains theme-aware.
 - Added a sidebar-transparency slider under General Settings; stats previews and regular tooltips now use theme-aware floating surfaces, including in light mode.
 - Kept the lower splash progress/status area for runtime extraction, making the slower first launch after reinstall understandable.
+- Direct HTTP no longer aborts a live model SSE body after the 5s header budget, which had caused repeated “model request retried” failures on a reachable API.
 
 ## 0.2.2 — 2026-08-16
 
