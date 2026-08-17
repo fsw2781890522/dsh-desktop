@@ -18,6 +18,8 @@ use std::{
 
 use tauri::{
     AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder,
+    WindowEvent,
+    window::{Effect, EffectsBuilder},
 };
 
 /// State shared between the server watcher and the app lifecycle.
@@ -523,6 +525,14 @@ fn show_error(app: &AppHandle, title: &str, message: &str) {
         .blocking_show();
 }
 
+/// Keep the WebView transparent and let the Windows compositor provide the
+/// backdrop. The HTML shell adds the theme tint on top of this surface; the
+/// native effect is what makes the background sampling real instead of a CSS
+/// blur over an opaque WebView.
+fn native_window_effects() -> tauri::utils::config::WindowEffectsConfig {
+    EffectsBuilder::new().effect(Effect::Acrylic).build()
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -627,6 +637,8 @@ fn main() {
                     .min_inner_size(900.0, 560.0)
                     .center()
                     .decorations(false)
+                    .transparent(true)
+                    .effects(native_window_effects())
                     .shadow(true)
                     .initialization_script(INIT_SCRIPT)
                     .initialization_script(DESKTOP_CHROME_SCRIPT)
@@ -703,11 +715,26 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building the DeepSeek Harness desktop app")
         .run(|app, event| {
-            if let RunEvent::Exit = event {
-                if let Some(state) = app.try_state::<ServerState>() {
-                    state.exiting.store(true, Ordering::SeqCst);
-                    stop_server(&state);
+            match event {
+                RunEvent::WindowEvent {
+                    label,
+                    event: WindowEvent::Focused(false),
+                    ..
+                } => {
+                    // Windows can drop the Acrylic composition after the
+                    // window loses focus. Reapply it to the exact window
+                    // rather than changing the WebView's CSS surface.
+                    if let Some(window) = app.get_webview_window(&label) {
+                        let _ = window.set_effects(native_window_effects());
+                    }
                 }
+                RunEvent::Exit => {
+                    if let Some(state) = app.try_state::<ServerState>() {
+                        state.exiting.store(true, Ordering::SeqCst);
+                        stop_server(&state);
+                    }
+                }
+                _ => {}
             }
         });
 }
@@ -715,6 +742,13 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_window_effects_enable_acrylic() {
+        let effects = native_window_effects();
+
+        assert_eq!(effects.effects, vec![Effect::Acrylic]);
+    }
 
     fn unique_temp(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
