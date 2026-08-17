@@ -8,6 +8,9 @@ All notable desktop-shell releases are recorded here. The running app reads the 
 - Prompt navigation includes steering/interjection prompts, and the sidebar uses a readable light/dark glass treatment with a 60% semantic fill and 40% background sampling.
 - The settings dialog remains the topmost full-viewport layer above composer, prompt navigation, and sidebar glass; history loading is centered in the session view with larger status text.
 - The factory `Anchored Standard` preset remains the new-session default while appearing in the Custom preset section.
+- Removed the session-list bottom fade that obscured content; native Acrylic is reapplied after focus loss and the sidebar glass remains theme-aware.
+- Added a sidebar-transparency slider under General Settings; stats previews and regular tooltips now use theme-aware floating surfaces, including in light mode.
+- Kept the lower splash progress/status area for runtime extraction, making the slower first launch after reinstall understandable.
 
 ## 0.2.2 — 2026-08-16
 
