@@ -1,6 +1,8 @@
 // Prevents an additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(windows)]
+mod acrylic;
 mod update;
 
 use std::{
@@ -17,9 +19,9 @@ use std::{
 };
 
 use tauri::{
-    AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder,
-    WindowEvent,
-    window::{Effect, EffectsBuilder},
+    AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
+    window::{Color, Effect, EffectsBuilder},
 };
 
 /// State shared between the server watcher and the app lifecycle.
@@ -538,6 +540,12 @@ fn native_window_effects() -> tauri::utils::config::WindowEffectsConfig {
     EffectsBuilder::new().effect(Effect::Acrylic).build()
 }
 
+fn restore_native_glass(window: &WebviewWindow) {
+    let _ = window.set_effects(native_window_effects());
+    #[cfg(windows)]
+    acrylic::apply(window);
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -643,6 +651,7 @@ fn main() {
                     .center()
                     .decorations(false)
                     .transparent(true)
+                    .background_color(Color(0, 0, 0, 0))
                     .effects(native_window_effects())
                     .shadow(true)
                     .initialization_script(INIT_SCRIPT)
@@ -654,6 +663,7 @@ fn main() {
                     })
                     .build()
                     .map_err(|e| e.to_string())?;
+            restore_native_glass(&window);
 
             // Unpack the runtime if needed, start the server, navigate to it.
             {
@@ -723,14 +733,14 @@ fn main() {
             match event {
                 RunEvent::WindowEvent {
                     label,
-                    event: WindowEvent::Focused(false),
+                    event: WindowEvent::Focused(_),
                     ..
                 } => {
-                    // Windows can drop the Acrylic composition after the
-                    // window loses focus. Reapply it to the exact window
-                    // rather than changing the WebView's CSS surface.
+                    // Windows 11 drops DWM's transient Acrylic on deactivate.
+                    // Re-apply the persistent composition attribute on both
+                    // focus edges so the glass does not disappear.
                     if let Some(window) = app.get_webview_window(&label) {
-                        let _ = window.set_effects(native_window_effects());
+                        restore_native_glass(&window);
                     }
                 }
                 RunEvent::Exit => {

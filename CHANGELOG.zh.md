@@ -7,6 +7,7 @@
 - 运行时基线换成官方 `@deepseek-ai/dsh@0.1.0-rc.7`，并保留桌面侧成果：无边框 Tauri 壳、可调透明度的侧栏毛玻璃、代理端口回退、默认模型、Anchored Standard、prompt 导航、「已处理」过程折叠，以及去掉设置按钮上方的 session 列表底部渐变。
 - 「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 `~/.dsh`。
 - 首次启动完整性检查接受 npm 提升到 `@deepseek-ai/` 旁的 `commander`，不再只认 dsh 包内的嵌套副本。
+- 窗口失焦后仍保留原生 Acrylic：壳会重刷持久 composition 属性，而不是依赖 Windows 11 在失活窗口上会停画的 transient 背景。
 
 ## 0.2.3 — 2026-08-17
 

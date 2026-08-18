@@ -21,6 +21,14 @@ serde_json = "1"
 sha2 = "0.10"
 ureq = "2"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Controls",
+] }
+
 [profile.release]
 codegen-units = 1
 lto = true
