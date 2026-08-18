@@ -111,7 +111,10 @@ const RUNTIME_STAMP_NAME: &str = ".dsh-desktop-runtime-stamp";
 const DSH_BIN_REL: &str = "node_modules/@deepseek-ai/dsh/lib/bin.js";
 /// Completeness probe: `commander` is a direct dependency of `@deepseek-ai/dsh`.
 /// A truncated installer extract omits it while still leaving `bin.js` in place.
-const COMMANDER_REL: &str = "node_modules/@deepseek-ai/dsh/node_modules/commander/package.json";
+/// Official npm may nest it under the dsh package or hoist it next to `@deepseek-ai/`.
+const COMMANDER_NESTED_REL: &str =
+    "node_modules/@deepseek-ai/dsh/node_modules/commander/package.json";
+const COMMANDER_HOISTED_REL: &str = "node_modules/commander/package.json";
 
 /// Tauri's `resource_dir()` returns `\\?\`-prefixed verbatim paths on
 /// Windows; child processes (node, tar) reject those.
@@ -135,10 +138,12 @@ fn resource_roots(app: &AppHandle) -> Vec<PathBuf> {
     roots
 }
 
+fn commander_present(root: &Path) -> bool {
+    root.join(COMMANDER_NESTED_REL).is_file() || root.join(COMMANDER_HOISTED_REL).is_file()
+}
+
 fn runtime_complete(root: &Path) -> bool {
-    root.join("node.exe").is_file()
-        && root.join(DSH_BIN_REL).is_file()
-        && root.join(COMMANDER_REL).is_file()
+    root.join("node.exe").is_file() && root.join(DSH_BIN_REL).is_file() && commander_present(root)
 }
 
 fn zip_stamp(zip: &Path) -> String {
@@ -338,14 +343,14 @@ fn ensure_runtime(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
         if current.trim() != expected || !runtime_complete(&dest) {
             emit_boot_status(app, "正在解压运行时…");
             extract_zip(&zip, &dest)?;
-            std::fs::write(&stamp_path, &expected)
-                .map_err(|e| format!("failed to write the runtime stamp: {e}"))?;
             if !runtime_complete(&dest) {
                 return Err(
                     "the unpacked runtime is missing node.exe, the dsh CLI, or commander"
                         .to_string(),
                 );
             }
+            std::fs::write(&stamp_path, &expected)
+                .map_err(|e| format!("failed to write the runtime stamp: {e}"))?;
         }
         return Ok((
             normalize_path(&dest.join("node.exe")),
@@ -767,7 +772,7 @@ mod tests {
             .unwrap();
         std::fs::write(root.join("node.exe"), node_contents).unwrap();
         std::fs::write(root.join(DSH_BIN_REL), b"bin").unwrap();
-        std::fs::write(root.join(COMMANDER_REL), b"{}").unwrap();
+        std::fs::write(root.join(COMMANDER_NESTED_REL), b"{}").unwrap();
     }
 
     fn pack_zip(src: &Path, zip: &Path) {
@@ -805,6 +810,26 @@ mod tests {
         );
         assert!(msg.contains("exit code: 1"));
         assert!(msg.contains("Can't unlink already-existing object: Permission denied"));
+    }
+
+    #[test]
+    fn runtime_complete_accepts_nested_or_hoisted_commander() {
+        let nested = unique_temp("complete-nested");
+        write_runtime_tree(&nested, b"node");
+        assert!(runtime_complete(&nested));
+
+        let hoisted = unique_temp("complete-hoisted");
+        std::fs::create_dir_all(hoisted.join("node_modules/@deepseek-ai/dsh/lib")).unwrap();
+        std::fs::create_dir_all(hoisted.join("node_modules/commander")).unwrap();
+        std::fs::write(hoisted.join("node.exe"), b"node").unwrap();
+        std::fs::write(hoisted.join(DSH_BIN_REL), b"bin").unwrap();
+        std::fs::write(hoisted.join(COMMANDER_HOISTED_REL), b"{}").unwrap();
+        assert!(runtime_complete(&hoisted));
+        std::fs::remove_file(hoisted.join(COMMANDER_HOISTED_REL)).unwrap();
+        assert!(!runtime_complete(&hoisted));
+
+        let _ = std::fs::remove_dir_all(&nested);
+        let _ = std::fs::remove_dir_all(&hoisted);
     }
 
     #[test]

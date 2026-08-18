@@ -117,6 +117,20 @@ if (-not $SkipNpm) {
     throw "SkipNpm requires an existing runtime at $dshRoot"
 }
 
+# Official npm may hoist `commander` next to `@deepseek-ai/`. The 0.3.0
+# completeness probe still looks under the dsh package; keep a nested copy
+# so first launch does not fail closed after a hoist install.
+$hoistedCommander = Join-Path $runtime "node_modules\commander"
+$nestedCommander = Join-Path $dshRoot "node_modules\commander"
+if (-not (Test-Path -LiteralPath (Join-Path $nestedCommander "package.json"))) {
+    if (-not (Test-Path -LiteralPath (Join-Path $hoistedCommander "package.json"))) {
+        throw "commander missing at $nestedCommander and $hoistedCommander"
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path $nestedCommander) | Out-Null
+    Copy-Item -Recurse -LiteralPath $hoistedCommander -Destination $nestedCommander
+    Write-Host "nested commander probe copy -> $nestedCommander"
+}
+
 # --- 3. Factory presets (shipped roster + default session preset) ---
 Install-FactoryPresets $dshRoot
 

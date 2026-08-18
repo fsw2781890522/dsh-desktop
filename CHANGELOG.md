@@ -4,8 +4,9 @@ All notable desktop-shell releases are recorded here. The running app reads the 
 
 ## 0.3.0 — 2026-08-18
 
-- Rebases the bundled harness onto official `@deepseek-ai/dsh@0.1.0-rc.7` while keeping the desktop-specific work: frameless Tauri chrome, sidebar glass with a transparency slider, proxy-port fallback, default models, Anchored Standard, prompt navigation, and collapsed “已处理” process runs.
+- Rebases the bundled harness onto official `@deepseek-ai/dsh@0.1.0-rc.7` while keeping the desktop-specific work: frameless Tauri chrome, sidebar glass with a transparency slider, proxy-port fallback, default models, Anchored Standard, prompt navigation, collapsed “已处理” process runs, and no session-list bottom fade above Settings.
 - Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in `~/.dsh`.
+- First-launch completeness accepts npm’s hoisted `commander` next to `@deepseek-ai/`, not only a nested copy under the dsh package.
 
 ## 0.2.3 — 2026-08-17
 
