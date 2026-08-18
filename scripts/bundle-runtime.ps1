@@ -55,10 +55,11 @@ function Install-FactoryPresets {
         Write-Host "factory preset ($trustLabel): $($_.Name) -> $dest"
     }
 
-    $webPatch = Join-Path $DshPackageRoot "node_modules\@deepseek-ai\dsh-web-app\cordis.patch.yml"
-    if (-not (Test-Path -LiteralPath $webPatch)) {
-        throw "web-app patch missing: $webPatch"
-    }
+    $nestedPatch = Join-Path $DshPackageRoot "node_modules\@deepseek-ai\dsh-web-app\cordis.patch.yml"
+    $hoistedPatch = Join-Path (Split-Path $DshPackageRoot) "dsh-web-app\cordis.patch.yml"
+    $webPatch = if (Test-Path -LiteralPath $nestedPatch) { $nestedPatch }
+        elseif (Test-Path -LiteralPath $hoistedPatch) { $hoistedPatch }
+        else { throw "web-app patch missing: $nestedPatch" }
     $text = [System.IO.File]::ReadAllText($webPatch)
     $updated = [regex]::Replace($text, '(?m)^(\s+default: )standard(?=\r?$)', '${1}anchored-standard')
     if ($updated -notmatch '(?m)^\s+default: anchored-standard\s*$') {
@@ -98,11 +99,15 @@ if (-not $SkipNpm) {
         } finally {
             Pop-Location
         }
-        $src = Join-Path $scratch "node_modules\@deepseek-ai\dsh"
-        Write-Host "copying dsh package into $dshRoot ..."
-        if (Test-Path -LiteralPath $dshRoot) { Remove-Item -LiteralPath $dshRoot -Recurse -Force }
-        robocopy $src $dshRoot /E /MT:16 /NFL /NDL /NP /NJH /R:2 /W:2 | Out-Null
+        $srcNm = Join-Path $scratch "node_modules"
+        $destNm = Join-Path $runtime "node_modules"
+        Write-Host "copying npm node_modules into $destNm ..."
+        if (Test-Path -LiteralPath $destNm) { Remove-Item -LiteralPath $destNm -Recurse -Force }
+        robocopy $srcNm $destNm /E /MT:16 /NFL /NDL /NP /NJH /R:2 /W:2 | Out-Null
         if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
+        if (-not (Test-Path -LiteralPath $dshRoot)) {
+            throw "npm install did not produce $dshRoot"
+        }
         $pkg = Get-Content (Join-Path $dshRoot "package.json") | ConvertFrom-Json
         Write-Host "bundled @deepseek-ai/dsh $($pkg.version)"
     } finally {

@@ -1,6 +1,6 @@
 [package]
 name = "dsh-desktop"
-version = "0.2.3"
+version = "0.3.0"
 description = "DeepSeek Harness as a Windows desktop app (Tauri wrapper around the official Web UI)"
 authors = ["DeepSeek Harness Desktop"]
 edition = "2021"

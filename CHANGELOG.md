@@ -2,6 +2,11 @@
 
 All notable desktop-shell releases are recorded here. The running app reads the same notes from `releases/latest.json`.
 
+## 0.3.0 — 2026-08-18
+
+- Rebases the bundled harness onto official `@deepseek-ai/dsh@0.1.0-rc.7` while keeping the desktop-specific work: frameless Tauri chrome, sidebar glass with a transparency slider, proxy-port fallback, default models, Anchored Standard, prompt navigation, and collapsed “已处理” process runs.
+- Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in `~/.dsh`.
+
 ## 0.2.3 — 2026-08-17
 
 - Open sessions now load their complete history in one request; the chat view no longer exposes the unreliable “Load earlier” control.
