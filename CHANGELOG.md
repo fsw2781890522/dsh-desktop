@@ -8,6 +8,7 @@ All notable desktop-shell releases are recorded here. The running app reads the 
 - Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in `~/.dsh`.
 - First-launch completeness accepts npm’s hoisted `commander` next to `@deepseek-ai/`, not only a nested copy under the dsh package.
 - Native Acrylic stays after the window loses focus: the shell reapplies a persistent composition attribute instead of Windows 11’s transient backdrop.
+- Confirmation dialogs opened from Settings, including provider delete, paint above the Settings overlay.
 
 ## 0.2.3 — 2026-08-17
 
