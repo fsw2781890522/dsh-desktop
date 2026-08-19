@@ -14,9 +14,12 @@ together with a standalone `node.exe` and serves it inside a native window:
 1. `scripts/bundle-runtime.ps1` copies `node.exe` + `@deepseek-ai/dsh` into
    `bundle-runtime/` (used by `tauri dev`), overlays `factory/agent-presets/`
    into the shipped roster (`config/agent-presets/`), sets the default session
-   preset to `anchored-standard`, and packs that tree into one
-   `bundle-runtime.zip`. The installer ships the zip, not ~33k individual
-   files: NSIS otherwise truncates the tree and `dsh` cannot resolve `commander`.
+   preset to `anchored-standard`, installs the factory web plugins from
+   `factory/web-plugins.json` into the runtime `node_modules`, and packs that
+   tree into one `bundle-runtime.zip`. The installer ships the zip, not ~33k
+   individual files: NSIS otherwise truncates the tree and `dsh` cannot resolve
+   `commander`. On launch the shell appends those plugin names to the web
+   profile bundle list when they are missing; it does not edit `cordis.patch.yml`.
 2. On launch the app unpacks the zip if needed, then spawns
    `node.exe node_modules/@deepseek-ai/dsh/lib/bin.js web --host 127.0.0.1 --port 0`
    and parses the readiness line (`dsh web: http://127.0.0.1:PORT`) from stdout.
@@ -89,10 +92,10 @@ new bundle), and rebuild.
 ```
 splash/                 Embedded splash + error pages (built by scripts/render-icon.mjs)
 icon-source/            Rendered 1024px black-background icon source
-factory/                Factory agent presets overlaid onto the shipped roster
+factory/                Factory agent presets and web-plugin pins overlaid at pack time
 scripts/
   render-icon.mjs       Renders icon + splash pages from the official whale path
-  bundle-runtime.ps1    Copies node.exe + @deepseek-ai/dsh, overlays factory presets, packs zip
+  bundle-runtime.ps1    Copies node.exe + @deepseek-ai/dsh, overlays factory presets and web plugins, packs zip
   publish-release.ps1   Copies the NSIS installer into releases/<version>/ and updates latest.json
 bundle-runtime/         Unpacked runtime used by `tauri dev` (not shipped by the installer)
 bundle-runtime.zip      Single-file runtime shipped as the Tauri resource

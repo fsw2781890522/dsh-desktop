@@ -74,6 +74,116 @@ function Install-FactoryPresets {
     }
 }
 
+function Read-FactoryWebPlugins {
+    $manifest = Join-Path $root "factory\web-plugins.json"
+    if (-not (Test-Path -LiteralPath $manifest)) {
+        throw "factory web plugins missing: $manifest"
+    }
+    $parsed = Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json
+    if (-not $parsed.packages) {
+        throw "factory web plugins must list packages: $manifest"
+    }
+    return @($parsed.packages)
+}
+
+function Merge-MissingNodeModules {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceModules,
+        [Parameter(Mandatory = $true)][string]$DestModules
+    )
+    New-Item -ItemType Directory -Force -Path $DestModules | Out-Null
+    Get-ChildItem -LiteralPath $SourceModules -Force | ForEach-Object {
+        if ($_.Name.StartsWith('.')) { return }
+        $dest = Join-Path $DestModules $_.Name
+        if ($_.Name.StartsWith('@') -and $_.PSIsContainer) {
+            $scopeName = $_.Name
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Get-ChildItem -LiteralPath $_.FullName | ForEach-Object {
+                $childDest = Join-Path $dest $_.Name
+                if (Test-Path -LiteralPath (Join-Path $childDest "package.json")) { return }
+                if (Test-Path -LiteralPath $childDest) { Remove-Item -LiteralPath $childDest -Recurse -Force }
+                Copy-Item -Recurse -LiteralPath $_.FullName -Destination $childDest
+                Write-Host "factory plugin package: $scopeName/$($_.Name)"
+            }
+            return
+        }
+        if (Test-Path -LiteralPath (Join-Path $dest "package.json")) { return }
+        if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+        Copy-Item -Recurse -LiteralPath $_.FullName -Destination $dest
+        Write-Host "factory plugin package: $($_.Name)"
+    }
+}
+
+function Install-FactoryWebPlugins {
+    param([Parameter(Mandatory = $true)][string]$RuntimeRoot)
+
+    $plugins = Read-FactoryWebPlugins
+    $specs = @($plugins | ForEach-Object { "$($_.name)@$($_.spec)" })
+    $scratch = Join-Path $env:TEMP "dsh-factory-web-plugins-$PID"
+    New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+    try {
+        Push-Location $scratch
+        try {
+            Write-Host ("npm install factory web plugins: " + ($specs -join ", "))
+            npm install --no-audit --no-fund --loglevel=error @specs
+            if ($LASTEXITCODE -ne 0) { throw "npm install of factory web plugins failed" }
+        } finally {
+            Pop-Location
+        }
+        $srcNm = Join-Path $scratch "node_modules"
+        $destNm = Join-Path $RuntimeRoot "node_modules"
+        if (-not (Test-Path -LiteralPath $srcNm)) {
+            throw "factory web plugin install produced no node_modules"
+        }
+        Merge-MissingNodeModules -SourceModules $srcNm -DestModules $destNm
+        $srcPty = Join-Path $srcNm "node-pty"
+        $sidebarPty = Join-Path $destNm "dsh-better-sidebar\node_modules\node-pty"
+        if (Test-Path -LiteralPath (Join-Path $srcPty "package.json")) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $sidebarPty) | Out-Null
+            if (Test-Path -LiteralPath $sidebarPty) { Remove-Item -LiteralPath $sidebarPty -Recurse -Force }
+            Copy-Item -Recurse -LiteralPath $srcPty -Destination $sidebarPty
+            Write-Host "nested node-pty for dsh-better-sidebar -> $sidebarPty"
+        }
+    } finally {
+        Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    foreach ($plugin in $plugins) {
+        $pkgName = [string]$plugin.name
+        $probe = if ($pkgName.StartsWith('@')) {
+            Join-Path $RuntimeRoot ("node_modules\" + ($pkgName -replace '/', '\'))
+        } else {
+            Join-Path $RuntimeRoot "node_modules\$pkgName"
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $probe "package.json"))) {
+            throw "factory web plugin missing after merge: $pkgName -> $probe"
+        }
+        $installed = Get-Content -Raw -LiteralPath (Join-Path $probe "package.json") | ConvertFrom-Json
+        if ([string]$installed.version -ne [string]$plugin.spec) {
+            throw "factory web plugin $pkgName version $($installed.version) != $($plugin.spec)"
+        }
+        if ($null -eq $installed.dsh.bundle.patch) {
+            throw "factory web plugin $pkgName declares no dsh.bundle.patch"
+        }
+    }
+
+    $ptyNode = Join-Path $RuntimeRoot "node_modules\dsh-better-sidebar\node_modules\node-pty\prebuilds\win32-x64\pty.node"
+    if (-not (Test-Path -LiteralPath $ptyNode)) {
+        $ptyNode = Join-Path $RuntimeRoot "node_modules\node-pty\prebuilds\win32-x64\pty.node"
+    }
+    if (-not (Test-Path -LiteralPath $ptyNode)) {
+        throw "factory web plugins need a node-pty win32-x64 prebuild (nested under dsh-better-sidebar or hoisted)"
+    }
+    Write-Host "node-pty native: $ptyNode"
+
+    $names = @($plugins | ForEach-Object { [string]$_.name })
+    $listPath = Join-Path $RuntimeRoot "factory-web-plugins.json"
+    $escaped = @($names | ForEach-Object { '"' + ($_ -replace '\\', '\\' -replace '"', '\"') + '"' })
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($listPath, ("[" + ($escaped -join ",") + "]`n"), $utf8)
+    Write-Host "factory web plugin bundles: $($names -join ', ')"
+}
+
 New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 
 if (-not $SkipNpm) {
@@ -133,6 +243,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $nestedCommander "package.json"))) {
 
 # --- 3. Factory presets (shipped roster + default session preset) ---
 Install-FactoryPresets $dshRoot
+
+# --- 3b. Factory web plugins (profile bundles resolved from this tree) ---
+Install-FactoryWebPlugins $runtime
 
 # --- 4. Smoke check: the bundled runtime must answer dsh --version ---
 & (Join-Path $runtime "node.exe") (Join-Path $dshRoot "lib\bin.js") --version

@@ -2,6 +2,11 @@
 
 桌面壳的历次发布记录写在这里。运行中的应用从 `releases/latest.json` 读取同一份说明。
 
+## 0.3.1 — 2026-08-19
+
+- 运行时自带 `@liustack/modlens@3.21.1`（给纯文本模型外挂视觉）和 `dsh-better-sidebar@0.13.1`（右侧栏工作台）。首次启动会在 web profile 的组合包列表里补上缺失项，不改用户的 `cordis.patch.yml`。ModLens 仍需在 `~/.modlens/config.json` 配置视觉引擎密钥。
+- 「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 `~/.dsh`。
+
 ## 0.3.0 — 2026-08-18
 
 - 运行时基线换成官方 `@deepseek-ai/dsh@0.1.0-rc.7`，并保留桌面侧成果：无边框 Tauri 壳、可调透明度的侧栏毛玻璃、代理端口回退、默认模型、Anchored Standard、prompt 导航、「已处理」过程折叠，以及去掉设置按钮上方的 session 列表底部渐变。

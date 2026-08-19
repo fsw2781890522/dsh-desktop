@@ -1,8 +1,25 @@
 {
     "schemaVersion":  1,
     "channel":  "stable",
-    "latest":  "0.3.0",
+    "latest":  "0.3.1",
     "releases":  [
+                     {
+                         "version":  "0.3.1",
+                         "releasedAt":  "2026-08-19T14:06:37Z",
+                         "notes":  {
+                                       "zh":  "运行时自带 ModLens 3.21.1 与 DSH-better-sidebar 0.13.1。首次启动会在 web profile 组合包列表里补上缺失项，不改用户 cordis.patch.yml。ModLens 仍需在 ~/.modlens/config.json 配置视觉引擎。「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 ~/.dsh。",
+                                       "en":  "Ships @liustack/modlens@3.21.1 and dsh-better-sidebar@0.13.1 in the bundled runtime. First launch appends them to the web profile bundle list when missing; user cordis.patch.yml is unchanged. ModLens still needs an engine key in ~/.modlens/config.json. Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in ~/.dsh."
+                                   },
+                         "artifacts":  {
+                                           "windows-x64":  {
+                                                               "kind":  "nsis",
+                                                               "filename":  "DeepSeek Harness_0.3.1_x64-setup.exe",
+                                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.1/DeepSeek.Harness_0.3.1_x64-setup.exe",
+                                                               "sha256":  "d6d48c9d2b65a650e601632ff95746b3db48bd7bd28ef27fc262136a8b4347b8",
+                                                               "size":  149305377
+                                                           }
+                                       }
+                     },
                      {
                          "version":  "0.3.0",
                          "releasedAt":  "2026-08-18T09:45:00Z",
@@ -12,12 +29,12 @@
                                    },
                          "artifacts":  {
                                            "windows-x64":  {
-                                               "kind":  "nsis",
-                                               "filename":  "DeepSeek Harness_0.3.0_x64-setup.exe",
-                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.0/DeepSeek.Harness_0.3.0_x64-setup.exe",
-                                               "sha256":  "111df282064b1687eefcee3262f4ee319dec2f5adb129092549032aba2a0bd10",
-                                               "size":  95933981
-                                           }
+                                                               "kind":  "nsis",
+                                                               "filename":  "DeepSeek Harness_0.3.0_x64-setup.exe",
+                                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.0/DeepSeek.Harness_0.3.0_x64-setup.exe",
+                                                               "sha256":  "111df282064b1687eefcee3262f4ee319dec2f5adb129092549032aba2a0bd10",
+                                                               "size":  95933981
+                                                           }
                                        }
                      },
                      {

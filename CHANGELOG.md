@@ -2,6 +2,11 @@
 
 All notable desktop-shell releases are recorded here. The running app reads the same notes from `releases/latest.json`.
 
+## 0.3.1 — 2026-08-19
+
+- Ships `@liustack/modlens@3.21.1` (vision for text-only models) and `dsh-better-sidebar@0.13.1` (right-side workbench) in the bundled runtime. A first launch appends them to the web profile bundle list when they are missing; user `cordis.patch.yml` is left unchanged. ModLens still needs an engine key in `~/.modlens/config.json`.
+- Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in `~/.dsh`.
+
 ## 0.3.0 — 2026-08-18
 
 - Rebases the bundled harness onto official `@deepseek-ai/dsh@0.1.0-rc.7` while keeping the desktop-specific work: frameless Tauri chrome, sidebar glass with a transparency slider, proxy-port fallback, default models, Anchored Standard, prompt navigation, collapsed “已处理” process runs, and no session-list bottom fade above Settings.

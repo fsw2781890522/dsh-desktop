@@ -372,6 +372,125 @@ fn ensure_runtime(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
     Err("bundled runtime not found (no complete bundle-runtime/ and no bundle-runtime.zip)".into())
 }
 
+const FACTORY_WEB_PLUGINS_REL: &str = "factory-web-plugins.json";
+
+/// Harness home used by the bundled `dsh web` child: `$DSH_HOME` when set,
+/// otherwise `~/.dsh`. The desktop shell never sets `DSH_HOME`.
+fn dsh_home() -> PathBuf {
+    if let Ok(value) = std::env::var("DSH_HOME") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    let user = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+    PathBuf::from(user.unwrap_or_default()).join(".dsh")
+}
+
+fn profile_patch_template() -> &'static str {
+    "# Your patch layer for this dsh profile, applied after every bundle layer:\n\
+# a top-level YAML array of loader patch entries (id-targeted config\n\
+# overrides, disables, and insert lists; `!!js` expressions allowed).\n\
+[]\n"
+}
+
+fn profile_pnpm_workspace() -> &'static str {
+    "packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n"
+}
+
+/// Append factory plugin bundle names to the web profile so a fresh install
+/// loads packages that already live in the bundled `node_modules`. Existing
+/// lists keep their order; the user `cordis.patch.yml` is never rewritten.
+fn ensure_factory_web_plugin_bundles(runtime: &Path) -> Result<(), String> {
+    ensure_factory_web_plugin_bundles_in(&dsh_home(), runtime)
+}
+
+fn ensure_factory_web_plugin_bundles_in(home: &Path, runtime: &Path) -> Result<(), String> {
+    let list_path = runtime.join(FACTORY_WEB_PLUGINS_REL);
+    if !list_path.is_file() {
+        return Ok(());
+    }
+    let raw = std::fs::read_to_string(&list_path)
+        .map_err(|e| format!("failed to read {}: {e}", list_path.display()))?;
+    let names: Vec<String> = serde_json::from_str(raw.trim()).map_err(|e| {
+        format!("factory web plugin list {} is not a JSON string array: {e}", list_path.display())
+    })?;
+    if names.is_empty() {
+        return Ok(());
+    }
+
+    let dir = home.join("profiles").join("web");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("failed to create the web profile directory {}: {e}", dir.display()))?;
+    let manifest_path = dir.join("package.json");
+    let created = !manifest_path.is_file();
+    let mut manifest: serde_json::Value = if created {
+        serde_json::json!({
+            "name": "dsh-profile-web",
+            "private": true,
+            "dependencies": {},
+            "dsh": { "profile": { "bundles": [
+                "@deepseek-ai/dsh-base",
+                "@deepseek-ai/dsh-web-app"
+            ] } }
+        })
+    } else {
+        let text = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| format!("failed to read {}: {e}", manifest_path.display()))?;
+        serde_json::from_str(&text)
+            .map_err(|e| format!("web profile manifest {} is not JSON: {e}", manifest_path.display()))?
+    };
+
+    let bundles = manifest
+        .pointer_mut("/dsh/profile/bundles")
+        .and_then(|value| value.as_array_mut());
+    let bundles = match bundles {
+        Some(bundles) => bundles,
+        None => {
+            if manifest.get("dsh").is_none() {
+                manifest["dsh"] = serde_json::json!({ "profile": { "bundles": [] } });
+            } else if manifest["dsh"].get("profile").is_none() {
+                manifest["dsh"]["profile"] = serde_json::json!({ "bundles": [] });
+            } else {
+                manifest["dsh"]["profile"]["bundles"] = serde_json::json!([]);
+            }
+            manifest
+                .pointer_mut("/dsh/profile/bundles")
+                .and_then(|value| value.as_array_mut())
+                .ok_or_else(|| "web profile manifest could not hold a bundles array".to_string())?
+        }
+    };
+
+    let mut changed = created;
+    for name in &names {
+        if !bundles.iter().any(|value| value.as_str() == Some(name.as_str())) {
+            bundles.push(serde_json::Value::String(name.clone()));
+            changed = true;
+        }
+    }
+    if changed {
+        let mut body = serde_json::to_string_pretty(&manifest)
+            .map_err(|e| format!("failed to serialize the web profile manifest: {e}"))?;
+        if !body.ends_with('\n') {
+            body.push('\n');
+        }
+        std::fs::write(&manifest_path, body)
+            .map_err(|e| format!("failed to write {}: {e}", manifest_path.display()))?;
+    }
+
+    let patch_path = dir.join("cordis.patch.yml");
+    if !patch_path.is_file() {
+        std::fs::write(&patch_path, profile_patch_template())
+            .map_err(|e| format!("failed to write {}: {e}", patch_path.display()))?;
+    }
+    let workspace_path = dir.join("pnpm-workspace.yaml");
+    if !workspace_path.is_file() {
+        std::fs::write(&workspace_path, profile_pnpm_workspace())
+            .map_err(|e| format!("failed to write {}: {e}", workspace_path.display()))?;
+    }
+    Ok(())
+}
+
 /// Parse the readiness line `dsh web: http://127.0.0.1:PORT ...`.
 fn port_of_readiness_line(line: &str) -> Option<u16> {
     let rest = line.strip_prefix("dsh web: http://127.0.0.1:")?;
@@ -676,6 +795,9 @@ fn main() {
                             return Err("the app is closing".to_string());
                         }
                         let (node, bin) = ensure_runtime(&handle)?;
+                        if let Some(runtime) = node.parent() {
+                            ensure_factory_web_plugin_bundles(runtime)?;
+                        }
                         if state.exiting.load(Ordering::SeqCst) {
                             return Err("the app is closing".to_string());
                         }
@@ -895,5 +1017,109 @@ mod tests {
         assert_eq!(std::fs::read(dest.join("node.exe")).unwrap(), b"new-node");
         assert!(runtime_complete(&dest));
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    fn bundles_of(manifest: &str) -> Vec<String> {
+        let value: serde_json::Value = serde_json::from_str(manifest).unwrap();
+        value["dsh"]["profile"]["bundles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn factory_web_plugins_append_missing_bundles_and_keep_user_patch() {
+        let home = unique_temp("plugins-home");
+        let runtime = unique_temp("plugins-runtime");
+        let profile = home.join("profiles").join("web");
+        std::fs::create_dir_all(&profile).unwrap();
+        std::fs::create_dir_all(&runtime).unwrap();
+        std::fs::write(
+            profile.join("package.json"),
+            r#"{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dependencies": { "dsh-default-models": "workspace:*" },
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] } }
+}
+"#,
+        )
+        .unwrap();
+        std::fs::write(profile.join("cordis.patch.yml"), "# keep me\n[]\n").unwrap();
+        std::fs::write(
+            runtime.join(FACTORY_WEB_PLUGINS_REL),
+            r#"["@liustack/modlens","dsh-better-sidebar"]"#,
+        )
+        .unwrap();
+
+        ensure_factory_web_plugin_bundles_in(&home, &runtime).unwrap();
+        let first = std::fs::read_to_string(profile.join("package.json")).unwrap();
+        assert_eq!(
+            bundles_of(&first),
+            vec![
+                "@deepseek-ai/dsh-base",
+                "@deepseek-ai/dsh-web-app",
+                "@liustack/modlens",
+                "dsh-better-sidebar"
+            ]
+        );
+        assert!(first.contains("dsh-default-models"));
+        assert_eq!(
+            std::fs::read_to_string(profile.join("cordis.patch.yml")).unwrap(),
+            "# keep me\n[]\n"
+        );
+
+        ensure_factory_web_plugin_bundles_in(&home, &runtime).unwrap();
+        assert_eq!(
+            bundles_of(&std::fs::read_to_string(profile.join("package.json")).unwrap()),
+            vec![
+                "@deepseek-ai/dsh-base",
+                "@deepseek-ai/dsh-web-app",
+                "@liustack/modlens",
+                "dsh-better-sidebar"
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&home);
+        let _ = std::fs::remove_dir_all(&runtime);
+    }
+
+    #[test]
+    fn factory_web_plugins_create_profile_when_missing() {
+        let home = unique_temp("plugins-create");
+        let runtime = unique_temp("plugins-create-runtime");
+        std::fs::create_dir_all(&runtime).unwrap();
+        std::fs::write(
+            runtime.join(FACTORY_WEB_PLUGINS_REL),
+            r#"["@liustack/modlens","dsh-better-sidebar"]"#,
+        )
+        .unwrap();
+        ensure_factory_web_plugin_bundles_in(&home, &runtime).unwrap();
+        let profile = home.join("profiles").join("web");
+        assert_eq!(
+            bundles_of(&std::fs::read_to_string(profile.join("package.json")).unwrap()),
+            vec![
+                "@deepseek-ai/dsh-base",
+                "@deepseek-ai/dsh-web-app",
+                "@liustack/modlens",
+                "dsh-better-sidebar"
+            ]
+        );
+        assert!(profile.join("cordis.patch.yml").is_file());
+        assert!(profile.join("pnpm-workspace.yaml").is_file());
+        let _ = std::fs::remove_dir_all(&home);
+        let _ = std::fs::remove_dir_all(&runtime);
+    }
+
+    #[test]
+    fn factory_web_plugins_skip_without_runtime_list() {
+        let home = unique_temp("plugins-skip");
+        let runtime = unique_temp("plugins-skip-runtime");
+        std::fs::create_dir_all(&runtime).unwrap();
+        ensure_factory_web_plugin_bundles_in(&home, &runtime).unwrap();
+        assert!(!home.join("profiles").join("web").join("package.json").is_file());
+        let _ = std::fs::remove_dir_all(&home);
+        let _ = std::fs::remove_dir_all(&runtime);
     }
 }

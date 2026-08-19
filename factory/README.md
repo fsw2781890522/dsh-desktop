@@ -12,3 +12,16 @@ section while remaining preinstalled and available to new sessions.
 
 Origin: [xiaobright/dsh-anchored-standard](https://github.com/xiaobright/dsh-anchored-standard)
 (MIT). See `anchored-standard/SOURCE.txt`.
+
+## Factory web plugins
+
+`factory/web-plugins.json` names npm packages copied into `bundle-runtime/node_modules`
+without replacing packages the official dsh tree already ships (`commander`, `undici`,
+and other shared libraries stay on the harness versions). The pack step also writes
+`bundle-runtime/factory-web-plugins.json` (a JSON string array of package names). On
+launch the shell appends any missing names to `~/.dsh/profiles/web` `dsh.profile.bundles`
+so a fresh install loads the plugins; it never rewrites the user `cordis.patch.yml`.
+
+Current pins: `@liustack/modlens@3.21.1`, `dsh-better-sidebar@0.13.1`. Do not also insert
+`id: modlens` or `id: better-sidebar` in the profile patch — those ids already come from
+each package's own `dsh.bundle.patch`.
