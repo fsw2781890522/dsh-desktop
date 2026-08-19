@@ -5,6 +5,7 @@ All notable desktop-shell releases are recorded here. The running app reads the 
 ## 0.3.1 — 2026-08-19
 
 - Ships `@liustack/modlens@3.21.1` (vision for text-only models) and `dsh-better-sidebar@0.13.1` (right-side workbench) in the bundled runtime. A first launch appends them to the web profile bundle list when they are missing; user `cordis.patch.yml` is left unchanged. ModLens still needs an engine key in `~/.modlens/config.json`.
+- Frameless chrome keeps minimize / maximize / close in the Web UI header row as 28px circular rail buttons matching the better-sidebar cluster (even 4px gap, top 3px). Session log, the cluster, and the caption buttons line up left-to-right; the blank-session hero can drag from the top 36px.
 - Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in `~/.dsh`.
 
 ## 0.3.0 — 2026-08-18

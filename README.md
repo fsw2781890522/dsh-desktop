@@ -24,8 +24,12 @@ together with a standalone `node.exe` and serves it inside a native window:
    `node.exe node_modules/@deepseek-ai/dsh/lib/bin.js web --host 127.0.0.1 --port 0`
    and parses the readiness line (`dsh web: http://127.0.0.1:PORT`) from stdout.
 3. A WebView2 window opens at `http://127.0.0.1:PORT/` — the untouched official UI.
-   The window is frameless: the official layout extends to the top edge, and
-   injected chrome reuses that header for dragging plus minimize / maximize / close.
+   The window is frameless. Injected chrome places minimize / maximize / close
+   in the existing Web UI header row (no extra titlebar strip): 28px circular
+   rail buttons matching the better-sidebar cluster, far right, then the
+   cluster, then Session log. The top 36px of non-interactive chrome is a
+   drag region so the blank-session hero (which has no header) can still move
+   the window. Button ink follows the GUI light / dark tokens.
 4. All harness user data lives in the standard `~/.dsh` directory, so the desktop
    app shares settings, credentials, and sessions with the CLI installation.
    Factory presets are **not** copied there: they ship inside the runtime as

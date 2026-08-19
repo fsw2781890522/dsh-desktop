@@ -5,6 +5,7 @@
 ## 0.3.1 — 2026-08-19
 
 - 运行时自带 `@liustack/modlens@3.21.1`（给纯文本模型外挂视觉）和 `dsh-better-sidebar@0.13.1`（右侧栏工作台）。首次启动会在 web profile 的组合包列表里补上缺失项，不改用户的 `cordis.patch.yml`。ModLens 仍需在 `~/.modlens/config.json` 配置视觉引擎密钥。
+- 无边框窗口把最小化 / 最大化 / 关闭放在 Web UI 顶行，做成与 better-sidebar 圆钮相同的 28px 轨道按钮（间距 4px、贴顶 3px）。Session log、侧栏圆钮与窗口按钮同一行排列；空白新会话顶部 36px 可拖动。
 - 「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 `~/.dsh`。
 
 ## 0.3.0 — 2026-08-18

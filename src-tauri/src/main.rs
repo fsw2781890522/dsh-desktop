@@ -54,7 +54,7 @@ fn emit_boot_status(app: &AppHandle, text: &str) {
 /// Init script injected into every page: routes `target="_blank"` anchors and
 /// `window.open` through the `dsh-ext://` scheme so the Rust side can open
 /// them in the system browser instead of a new WebView window.
-/// Frameless chrome (drag region + window controls) injected into splash
+/// Frameless chrome (drag + in-UI window controls) injected into splash
 /// and the official Web UI. Lives beside this file so the Rust source stays
 /// the window lifecycle, not the HTML/CSS.
 const DESKTOP_CHROME_SCRIPT: &str = include_str!("desktop-chrome.js");

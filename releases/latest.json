@@ -5,18 +5,18 @@
     "releases":  [
                      {
                          "version":  "0.3.1",
-                         "releasedAt":  "2026-08-19T14:06:37Z",
+                         "releasedAt":  "2026-08-19T15:19:18Z",
                          "notes":  {
-                                       "zh":  "运行时自带 ModLens 3.21.1 与 DSH-better-sidebar 0.13.1。首次启动会在 web profile 组合包列表里补上缺失项，不改用户 cordis.patch.yml。ModLens 仍需在 ~/.modlens/config.json 配置视觉引擎。「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 ~/.dsh。",
-                                       "en":  "Ships @liustack/modlens@3.21.1 and dsh-better-sidebar@0.13.1 in the bundled runtime. First launch appends them to the web profile bundle list when missing; user cordis.patch.yml is unchanged. ModLens still needs an engine key in ~/.modlens/config.json. Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in ~/.dsh."
+                                       "zh":  "运行时自带 ModLens 3.21.1 与 DSH-better-sidebar 0.13.1。首次启动会在 web profile 组合包列表里补上缺失项，不改用户 cordis.patch.yml。ModLens 仍需在 ~/.modlens/config.json 配置视觉引擎。无边框窗口的最小化/最大化/关闭与右侧栏圆钮同一行、同尺寸同间距，空白新会话顶部可拖动。「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 ~/.dsh。",
+                                       "en":  "Ships @liustack/modlens@3.21.1 and dsh-better-sidebar@0.13.1 in the bundled runtime. First launch appends them to the web profile bundle list when missing; user cordis.patch.yml is unchanged. ModLens still needs an engine key in ~/.modlens/config.json. Frameless chrome keeps min/max/close in the Web UI header row as 28px circular rail buttons matching the better-sidebar cluster; Session log, the cluster, and caption buttons line up, and the blank-session hero can drag from the top 36px. Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in ~/.dsh."
                                    },
                          "artifacts":  {
                                            "windows-x64":  {
                                                                "kind":  "nsis",
                                                                "filename":  "DeepSeek Harness_0.3.1_x64-setup.exe",
                                                                "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.1/DeepSeek.Harness_0.3.1_x64-setup.exe",
-                                                               "sha256":  "d6d48c9d2b65a650e601632ff95746b3db48bd7bd28ef27fc262136a8b4347b8",
-                                                               "size":  149305377
+                                                               "sha256":  "6a88f254916fb36d24c9b77280abdbfd41057f9c110559feeb95095335d6a0b9",
+                                                               "size":  149320991
                                                            }
                                        }
                      },
