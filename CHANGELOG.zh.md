@@ -6,6 +6,7 @@
 
 - 运行时以官方 `@deepseek-ai/dsh@0.1.1-rc.1` 为基线，并叠加本机个人 fork 的已构建成果，包括会话/进程 UI、prompt 导航、代理回退和原生附件客户端改动。
 - 官方 baseline 已原生提供 DeepSeek 多模态视觉输入、持久化图片附件和受附件能力门控的 `read_image` 工具，因此新版桌面移除 ModLens，只保留 `dsh-better-sidebar@0.13.1` 作为出厂 web 插件。
+- 对仍引用已退役 `@deepseek-ai/dsh-client-web-react` 模块的 0.3.1 个人 profile 插件，桌面运行时加入兼容桥并把它纳入完整性检查；官方 rc.1 源码不变。
 - 出厂 Anchored Standard 的工具发现索引改为指向原生 `read_image`。用户数据仍在 `~/.dsh`；产品 HTTP 代理回退仍与智能体 web 工具分属不同平面。
 - 检查更新现在只读取个人 GitHub Releases API。`main` 上的提交不会在对应 Release 创建前宣告安装包；安装前会校验 Release asset 的 GitHub SHA-256 digest。
 

@@ -125,6 +125,13 @@ const WEB_APP_MANIFEST_REL: &str = "node_modules/@deepseek-ai/dsh-web-app/packag
 const UI_REFERENCE_MANIFEST_REL: &str =
     "node_modules/@deepseek-ai/dsh-client-ui-reference/package.json";
 const OPEN_MANIFEST_REL: &str = "node_modules/open/package.json";
+/// The personal 0.3.1 profile can still contain browser plugins compiled
+/// against the retired rc.7 web-react package. 0.3.2 ships a desktop-owned
+/// browser compatibility bundle for that existing user data.
+const WEB_REACT_COMPAT_MANIFEST_REL: &str =
+    "node_modules/@deepseek-ai/dsh-client-web-react/package.json";
+const WEB_REACT_COMPAT_CLIENT_REL: &str =
+    "node_modules/@deepseek-ai/dsh-client-web-react/lib/client.js";
 
 /// Tauri's `resource_dir()` returns `\\?\`-prefixed verbatim paths on
 /// Windows; child processes (node, tar) reject those.
@@ -157,6 +164,8 @@ fn web_runtime_dependency_closure_present(root: &Path) -> bool {
         WEB_APP_MANIFEST_REL,
         UI_REFERENCE_MANIFEST_REL,
         OPEN_MANIFEST_REL,
+        WEB_REACT_COMPAT_MANIFEST_REL,
+        WEB_REACT_COMPAT_CLIENT_REL,
     ]
     .iter()
     .all(|relative| root.join(relative).is_file())
@@ -966,11 +975,19 @@ mod tests {
             WEB_APP_MANIFEST_REL,
             UI_REFERENCE_MANIFEST_REL,
             OPEN_MANIFEST_REL,
+            WEB_REACT_COMPAT_MANIFEST_REL,
+            WEB_REACT_COMPAT_CLIENT_REL,
         ] {
             let path = root.join(relative);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, b"{}").unwrap();
         }
+    }
+
+    fn write_runtime_tree_without_web_react_compat(root: &Path, node_contents: &[u8]) {
+        write_runtime_tree(root, node_contents);
+        std::fs::remove_file(root.join(WEB_REACT_COMPAT_MANIFEST_REL)).unwrap();
+        std::fs::remove_file(root.join(WEB_REACT_COMPAT_CLIENT_REL)).unwrap();
     }
 
     fn write_runtime_tree_without_web_closure(root: &Path, node_contents: &[u8]) {
@@ -1035,6 +1052,8 @@ mod tests {
             WEB_APP_MANIFEST_REL,
             UI_REFERENCE_MANIFEST_REL,
             OPEN_MANIFEST_REL,
+            WEB_REACT_COMPAT_MANIFEST_REL,
+            WEB_REACT_COMPAT_CLIENT_REL,
         ] {
             let path = hoisted.join(relative);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -1058,6 +1077,8 @@ mod tests {
             "node_modules/@deepseek-ai/dsh-web-app/package.json",
             "node_modules/@deepseek-ai/dsh-client-ui-reference/package.json",
             "node_modules/open/package.json",
+            WEB_REACT_COMPAT_MANIFEST_REL,
+            WEB_REACT_COMPAT_CLIENT_REL,
         ] {
             let path = root.join(relative);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -1066,6 +1087,24 @@ mod tests {
         assert!(runtime_complete(&root));
 
         std::fs::remove_file(root.join("node_modules/open/package.json")).unwrap();
+        assert!(!runtime_complete(&root));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn runtime_complete_requires_the_legacy_web_react_compat_bundle() {
+        let root = unique_temp("complete-web-react-compat");
+        write_runtime_tree_without_web_react_compat(&root, b"node");
+        assert!(!runtime_complete(&root));
+
+        for relative in [WEB_REACT_COMPAT_MANIFEST_REL, WEB_REACT_COMPAT_CLIENT_REL] {
+            let path = root.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"{}").unwrap();
+        }
+        assert!(runtime_complete(&root));
+
+        std::fs::remove_file(root.join(WEB_REACT_COMPAT_CLIENT_REL)).unwrap();
         assert!(!runtime_complete(&root));
         let _ = std::fs::remove_dir_all(&root);
     }

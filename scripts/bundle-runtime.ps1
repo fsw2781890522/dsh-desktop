@@ -384,6 +384,79 @@ function Install-FactoryWebPlugins {
     Write-Host "factory web plugin bundles: $($names -join ', ')"
 }
 
+function Install-WebReactCompat {
+    param([Parameter(Mandatory = $true)][string]$RuntimeRoot)
+
+    $source = Join-Path $root "factory\web-compat\dsh-client-web-react"
+    if (-not (Test-Path -LiteralPath (Join-Path $source "package.json"))) {
+        throw "web-react compatibility package missing: $source"
+    }
+    $target = Join-Path $RuntimeRoot "node_modules\@deepseek-ai\dsh-client-web-react"
+    Copy-TreeContents $source $target
+
+    $manifestPath = Join-Path $target "package.json"
+    $clientPath = Join-Path $target "lib\client.js"
+    if (-not (Test-Path -LiteralPath $clientPath)) {
+        throw "web-react compatibility client bundle missing: $clientPath"
+    }
+    $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    if ([string]$manifest.name -ne "@deepseek-ai/dsh-client-web-react") {
+        throw "web-react compatibility package has the wrong name: $manifestPath"
+    }
+    if ([string]$manifest.dsh.client.platform -ne "web" -or $manifest.dsh.client.immediately -ne $true) {
+        throw "web-react compatibility package must be an immediate web client package: $manifestPath"
+    }
+
+    # Profile plugin imports resolve from ~/.dsh/profiles/node_modules. Add the
+    # compatibility package to the installed dsh dependency closure so the
+    # harness heals that fallback link to this exact runtime tree.
+    $webAppManifestPath = Join-Path $RuntimeRoot "node_modules\@deepseek-ai\dsh-web-app\package.json"
+    if (-not (Test-Path -LiteralPath $webAppManifestPath)) {
+        throw "web-app manifest missing while installing web-react compatibility: $webAppManifestPath"
+    }
+    $webAppManifest = Get-Content -Raw -LiteralPath $webAppManifestPath | ConvertFrom-Json
+    if ($null -eq $webAppManifest.dependencies) {
+        $webAppManifest | Add-Member -MemberType NoteProperty -Name dependencies -Value ([pscustomobject]@{})
+    }
+    $dependency = $webAppManifest.dependencies.PSObject.Properties["@deepseek-ai/dsh-client-web-react"]
+    if ($null -eq $dependency) {
+        $webAppManifest.dependencies | Add-Member -MemberType NoteProperty -Name "@deepseek-ai/dsh-client-web-react" -Value ([string]$manifest.version)
+    } else {
+        $dependency.Value = [string]$manifest.version
+    }
+    $manifestJson = $webAppManifest | ConvertTo-Json -Depth 100
+    if (-not $manifestJson.EndsWith("`n")) { $manifestJson += "`n" }
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($webAppManifestPath, $manifestJson, $utf8)
+
+    # The official rc.1 source deliberately omits the retired package from its
+    # roster.  This desktop-only overlay adds the compatibility row to the
+    # copied web patch without changing the official checkout.
+    $webPatch = Join-Path $RuntimeRoot "node_modules\@deepseek-ai\dsh-web-app\cordis.patch.yml"
+    if (-not (Test-Path -LiteralPath $webPatch)) {
+        throw "web-app patch missing while installing web-react compatibility: $webPatch"
+    }
+    $text = [System.IO.File]::ReadAllText($webPatch)
+    $rowName = "name: '@deepseek-ai/dsh-client-web-react'"
+    if ($text -notmatch [regex]::Escape($rowName)) {
+        $marker = "    - id: modules"
+        if (-not $text.Contains($marker)) {
+            throw "web-app patch has no browser module roster marker: $webPatch"
+        }
+        $compatBlock = @"
+    # Desktop compatibility for personal rc.7-era profile plugins. The
+    # package is prefetched before any consumer can synchronously require it.
+    - id: legacy-web-react-compat
+      name: '@deepseek-ai/dsh-client-web-react'
+
+"@
+        $updated = $text.Replace($marker, $compatBlock + $marker)
+        $utf8 = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($webPatch, $updated, $utf8)
+    }
+    Write-Host "web-react compatibility: $target"
+}
+
 New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 
 if (-not $SkipNpm) {
@@ -450,6 +523,9 @@ Install-FactoryPresets $dshRoot
 
 # --- 3b. Factory web plugins (profile bundles resolved from this tree) ---
 Install-FactoryWebPlugins $runtime
+
+# --- 3c. Personal profile compatibility (rc.7 web-react -> rc.1 renderer) ---
+Install-WebReactCompat $runtime
 
 # --- 4. Smoke checks: validate the overlaid web dependency closure and dsh ---
 $webImportProbe = "await import('@deepseek-ai/dsh-client-ui-reference'); await import('@deepseek-ai/dsh-web-app');"

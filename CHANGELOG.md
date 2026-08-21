@@ -6,6 +6,7 @@ All notable desktop-shell releases are recorded here. The running app shows note
 
 - Rebases the bundled runtime on the official `@deepseek-ai/dsh@0.1.1-rc.1` baseline and overlays the locally built personal fork, including the session/process UI, prompt navigation, proxy fallback, and native attachment client changes.
 - The official baseline now provides native multimodal DeepSeek vision input, durable image attachments, and the attachment-gated `read_image` tool. The desktop therefore removes the ModLens plugin and keeps only `dsh-better-sidebar@0.13.1` as the factory web plugin.
+- 0.3.1-era personal profile plugins that still import the retired `@deepseek-ai/dsh-client-web-react` module are kept compatible by a desktop-owned bridge and an explicit runtime completeness check; the official rc.1 source is unchanged.
 - The factory Anchored Standard discovery index points to native `read_image` for image inspection. User data remains in `~/.dsh`; product HTTP proxy fallback remains separate from agent web tools.
 - Update discovery now reads only the personal GitHub Releases API. A commit on `main` cannot advertise an installer before its matching Release exists; the Release asset's GitHub SHA-256 digest is verified before installation.
 

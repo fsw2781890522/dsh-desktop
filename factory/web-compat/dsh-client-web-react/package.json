@@ -1,0 +1,23 @@
+{
+  "name": "@deepseek-ai/dsh-client-web-react",
+  "version": "0.3.2-compat.1",
+  "private": true,
+  "description": "Desktop compatibility bundle for personal plugins compiled against the rc.7 web-react module.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}
