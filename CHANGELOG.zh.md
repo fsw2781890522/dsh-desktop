@@ -2,6 +2,12 @@
 
 桌面壳的历次发布记录写在这里。运行中的应用从 `releases/latest.json` 读取同一份说明。
 
+## 0.3.2 — 2026-08-21
+
+- 运行时以官方 `@deepseek-ai/dsh@0.1.1-rc.1` 为基线，并叠加本机个人 fork 的已构建成果，包括会话/进程 UI、prompt 导航、代理回退和原生附件客户端改动。
+- 官方 baseline 已原生提供 DeepSeek 多模态视觉输入、持久化图片附件和受附件能力门控的 `read_image` 工具，因此新版桌面移除 ModLens，只保留 `dsh-better-sidebar@0.13.1` 作为出厂 web 插件。
+- 出厂 Anchored Standard 的工具发现索引改为指向原生 `read_image`。用户数据仍在 `~/.dsh`；产品 HTTP 代理回退仍与智能体 web 工具分属不同平面。
+
 ## 0.3.1 — 2026-08-19
 
 - 运行时自带 `@liustack/modlens@3.21.1`（给纯文本模型外挂视觉）和 `dsh-better-sidebar@0.13.1`（右侧栏工作台）。首次启动会在 web profile 的组合包列表里补上缺失项，不改用户的 `cordis.patch.yml`。ModLens 仍需在 `~/.modlens/config.json` 配置视觉引擎密钥。纯文本 DeepSeek 读图走 `modlens_read_image`，出厂 Anchored Standard 的工具发现索引不再指向宿主 `read_image`。

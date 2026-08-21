@@ -2,6 +2,12 @@
 
 All notable desktop-shell releases are recorded here. The running app reads the same notes from `releases/latest.json`.
 
+## 0.3.2 — 2026-08-21
+
+- Rebases the bundled runtime on the official `@deepseek-ai/dsh@0.1.1-rc.1` baseline and overlays the locally built personal fork, including the session/process UI, prompt navigation, proxy fallback, and native attachment client changes.
+- The official baseline now provides native multimodal DeepSeek vision input, durable image attachments, and the attachment-gated `read_image` tool. The desktop therefore removes the ModLens plugin and keeps only `dsh-better-sidebar@0.13.1` as the factory web plugin.
+- The factory Anchored Standard discovery index points to native `read_image` for image inspection. User data remains in `~/.dsh`; product HTTP proxy fallback remains separate from agent web tools.
+
 ## 0.3.1 — 2026-08-19
 
 - Ships `@liustack/modlens@3.21.1` (vision for text-only models) and `dsh-better-sidebar@0.13.1` (right-side workbench) in the bundled runtime. A first launch appends them to the web profile bundle list when they are missing; user `cordis.patch.yml` is left unchanged. ModLens still needs an engine key in `~/.modlens/config.json`. On text-only DeepSeek, image reads go through `modlens_read_image`; the factory Anchored Standard discovery index no longer points at the host `read_image`.

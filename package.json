@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "DeepSeek Harness as a Windows desktop app: Tauri shell that bundles Node.js + the official dsh CLI and serves the Web UI on 127.0.0.1.",
   "scripts": {

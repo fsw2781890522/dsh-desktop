@@ -19,9 +19,9 @@ use std::{
 };
 
 use tauri::{
+    window::{Color, Effect, EffectsBuilder},
     AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
-    window::{Color, Effect, EffectsBuilder},
 };
 
 /// State shared between the server watcher and the app lifecycle.
@@ -413,15 +413,22 @@ fn ensure_factory_web_plugin_bundles_in(home: &Path, runtime: &Path) -> Result<(
     let raw = std::fs::read_to_string(&list_path)
         .map_err(|e| format!("failed to read {}: {e}", list_path.display()))?;
     let names: Vec<String> = serde_json::from_str(raw.trim()).map_err(|e| {
-        format!("factory web plugin list {} is not a JSON string array: {e}", list_path.display())
+        format!(
+            "factory web plugin list {} is not a JSON string array: {e}",
+            list_path.display()
+        )
     })?;
     if names.is_empty() {
         return Ok(());
     }
 
     let dir = home.join("profiles").join("web");
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("failed to create the web profile directory {}: {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| {
+        format!(
+            "failed to create the web profile directory {}: {e}",
+            dir.display()
+        )
+    })?;
     let manifest_path = dir.join("package.json");
     let created = !manifest_path.is_file();
     let mut manifest: serde_json::Value = if created {
@@ -437,8 +444,12 @@ fn ensure_factory_web_plugin_bundles_in(home: &Path, runtime: &Path) -> Result<(
     } else {
         let text = std::fs::read_to_string(&manifest_path)
             .map_err(|e| format!("failed to read {}: {e}", manifest_path.display()))?;
-        serde_json::from_str(&text)
-            .map_err(|e| format!("web profile manifest {} is not JSON: {e}", manifest_path.display()))?
+        serde_json::from_str(&text).map_err(|e| {
+            format!(
+                "web profile manifest {} is not JSON: {e}",
+                manifest_path.display()
+            )
+        })?
     };
 
     let bundles = manifest
@@ -463,7 +474,10 @@ fn ensure_factory_web_plugin_bundles_in(home: &Path, runtime: &Path) -> Result<(
 
     let mut changed = created;
     for name in &names {
-        if !bundles.iter().any(|value| value.as_str() == Some(name.as_str())) {
+        if !bundles
+            .iter()
+            .any(|value| value.as_str() == Some(name.as_str()))
+        {
             bundles.push(serde_json::Value::String(name.clone()));
             changed = true;
         }
@@ -1050,7 +1064,7 @@ mod tests {
         std::fs::write(profile.join("cordis.patch.yml"), "# keep me\n[]\n").unwrap();
         std::fs::write(
             runtime.join(FACTORY_WEB_PLUGINS_REL),
-            r#"["@liustack/modlens","dsh-better-sidebar"]"#,
+            r#"["dsh-better-sidebar"]"#,
         )
         .unwrap();
 
@@ -1061,7 +1075,6 @@ mod tests {
             vec![
                 "@deepseek-ai/dsh-base",
                 "@deepseek-ai/dsh-web-app",
-                "@liustack/modlens",
                 "dsh-better-sidebar"
             ]
         );
@@ -1077,7 +1090,6 @@ mod tests {
             vec![
                 "@deepseek-ai/dsh-base",
                 "@deepseek-ai/dsh-web-app",
-                "@liustack/modlens",
                 "dsh-better-sidebar"
             ]
         );
@@ -1092,7 +1104,7 @@ mod tests {
         std::fs::create_dir_all(&runtime).unwrap();
         std::fs::write(
             runtime.join(FACTORY_WEB_PLUGINS_REL),
-            r#"["@liustack/modlens","dsh-better-sidebar"]"#,
+            r#"["dsh-better-sidebar"]"#,
         )
         .unwrap();
         ensure_factory_web_plugin_bundles_in(&home, &runtime).unwrap();
@@ -1102,7 +1114,6 @@ mod tests {
             vec![
                 "@deepseek-ai/dsh-base",
                 "@deepseek-ai/dsh-web-app",
-                "@liustack/modlens",
                 "dsh-better-sidebar"
             ]
         );
@@ -1118,7 +1129,11 @@ mod tests {
         let runtime = unique_temp("plugins-skip-runtime");
         std::fs::create_dir_all(&runtime).unwrap();
         ensure_factory_web_plugin_bundles_in(&home, &runtime).unwrap();
-        assert!(!home.join("profiles").join("web").join("package.json").is_file());
+        assert!(!home
+            .join("profiles")
+            .join("web")
+            .join("package.json")
+            .is_file());
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&runtime);
     }

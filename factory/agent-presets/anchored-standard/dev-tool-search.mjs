@@ -51,7 +51,7 @@ const UNLOCKABLE_INDEX = [
   'workflow — run multi-agent workflow scripts',
   'ralph — fresh-agent iterative loop',
   'create_goal / get_goal / update_goal — long-running goals',
-  'modlens_read_image — read image files through the vision plugin (text-only DeepSeek; do not use read_image)',
+  'read_image — inspect local image files through the native multimodal path (use with an image-capable model)',
   'job_list / job_output / job_kill — background jobs',
   'interrupt_agent / send_message / list_agents — multi-agent control',
   'todo_write — task tracking',

@@ -1,6 +1,5 @@
 {
   "packages": [
-    { "name": "@liustack/modlens", "spec": "3.21.1" },
     { "name": "dsh-better-sidebar", "spec": "0.13.1" }
   ]
 }

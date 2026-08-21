@@ -3,9 +3,12 @@
 # bundle-runtime.zip for the installer.
 param(
     # dsh package version to install (published on npm).
-    [string]$DshVersion = "latest",
+    [string]$DshVersion = "0.1.1-rc.1",
     # Source node.exe to copy (must be Node >= 22.19 or >= 24).
     [string]$NodeExe = "",
+    # Optional local deepseek-harness checkout whose built package artifacts
+    # overlay the published dsh baseline before the runtime is packed.
+    [string]$LocalHarnessRoot = "",
     # Skip npm install + node.exe copy; overlay factory presets onto an
     # existing bundle-runtime and re-pack the zip.
     [switch]$SkipNpm
@@ -15,6 +18,93 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $runtime = Join-Path $root "bundle-runtime"
 $dshRoot = Join-Path $runtime "node_modules\@deepseek-ai\dsh"
+
+function Copy-TreeContents {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+    if (-not (Test-Path -LiteralPath $Source)) {
+        throw "overlay source missing: $Source"
+    }
+    if (Test-Path -LiteralPath $Destination) {
+        Remove-Item -LiteralPath $Destination -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Get-ChildItem -LiteralPath $Source -Force | ForEach-Object {
+        Copy-Item -Recurse -Force -LiteralPath $_.FullName -Destination (Join-Path $Destination $_.Name)
+    }
+}
+
+function Install-LocalHarnessOverlay {
+    param([Parameter(Mandatory = $true)][string]$HarnessRoot)
+
+    $resolvedRoot = [System.IO.Path]::GetFullPath($HarnessRoot)
+    $localCli = Join-Path $resolvedRoot "apps\cli"
+    if (-not (Test-Path -LiteralPath (Join-Path $localCli "package.json"))) {
+        throw "local harness checkout has no apps/cli package: $resolvedRoot"
+    }
+
+    $runtimePackage = Get-Content -Raw -LiteralPath (Join-Path $dshRoot "package.json") | ConvertFrom-Json
+    $localPackage = Get-Content -Raw -LiteralPath (Join-Path $localCli "package.json") | ConvertFrom-Json
+    if ([string]$runtimePackage.version -ne [string]$localPackage.version) {
+        if (-not $SkipNpm) {
+            throw "local dsh version $($localPackage.version) does not match bundled baseline $($runtimePackage.version)"
+        }
+        Write-Warning "using existing runtime dependency closure $($runtimePackage.version) while overlaying local dsh $($localPackage.version)"
+    }
+
+    Copy-TreeContents (Join-Path $localCli "lib") (Join-Path $dshRoot "lib")
+    Copy-TreeContents (Join-Path $localCli "config") (Join-Path $dshRoot "config")
+    if ([string]$runtimePackage.version -ne [string]$localPackage.version) {
+        $runtimePackage.version = [string]$localPackage.version
+        $utf8 = New-Object System.Text.UTF8Encoding $false
+        $runtimePackageJson = ($runtimePackage | ConvertTo-Json -Depth 100).TrimEnd() + "`n"
+        [System.IO.File]::WriteAllText((Join-Path $dshRoot "package.json"), $runtimePackageJson, $utf8)
+    }
+
+    $runtimeDependencyNames = @()
+    foreach ($sectionName in @("dependencies", "optionalDependencies")) {
+        $section = $localPackage.$sectionName
+        if ($null -ne $section) {
+            $runtimeDependencyNames += @($section.psobject.Properties.Name | Where-Object { $_.StartsWith("@deepseek-ai/") })
+        }
+    }
+
+    $packageCount = 0
+    foreach ($rootName in @("vendor", "packages", "apps")) {
+        $sourceRoot = Join-Path $resolvedRoot $rootName
+        if (-not (Test-Path -LiteralPath $sourceRoot)) { continue }
+        Get-ChildItem -LiteralPath $sourceRoot -Filter package.json -Recurse -File | ForEach-Object {
+            $sourcePackage = Get-Content -Raw -LiteralPath $_.FullName | ConvertFrom-Json
+            $packageName = [string]$sourcePackage.name
+            if (-not $packageName.StartsWith("@deepseek-ai/")) { return }
+            $sourceLib = Join-Path $_.Directory.FullName "lib"
+            if (-not (Test-Path -LiteralPath $sourceLib)) { return }
+            $targetPackage = Join-Path $runtime ("node_modules\" + ($packageName -replace '/', '\'))
+            if (-not (Test-Path -LiteralPath (Join-Path $targetPackage "package.json"))) {
+                if (-not ($runtimeDependencyNames -contains $packageName)) { return }
+                New-Item -ItemType Directory -Force -Path $targetPackage | Out-Null
+                Copy-Item -Force -LiteralPath $_.FullName -Destination (Join-Path $targetPackage "package.json")
+                Write-Host "materialized local runtime dependency: $packageName"
+            }
+            Copy-TreeContents $sourceLib (Join-Path $targetPackage "lib")
+            $packageCount += 1
+        }
+    }
+
+    $localWebDist = Join-Path $resolvedRoot "apps\web\dist"
+    $webFrontend = Join-Path $runtime "node_modules\@deepseek-ai\dsh-web-frontend"
+    Copy-TreeContents $localWebDist (Join-Path $webFrontend "dist")
+
+    $localWebPatch = Join-Path $resolvedRoot "packages\bundle\web-app\cordis.patch.yml"
+    $runtimeWebPatch = Join-Path $runtime "node_modules\@deepseek-ai\dsh-web-app\cordis.patch.yml"
+    if (-not (Test-Path -LiteralPath $localWebPatch)) {
+        throw "local web-app patch missing: $localWebPatch"
+    }
+    Copy-Item -Force -LiteralPath $localWebPatch -Destination $runtimeWebPatch
+    Write-Host "local harness overlay: dsh $($localPackage.version), $packageCount package libraries, web frontend dist"
+}
 
 function Install-FactoryPresets {
     param([Parameter(Mandatory = $true)][string]$DshPackageRoot)
@@ -118,6 +208,15 @@ function Install-FactoryWebPlugins {
     param([Parameter(Mandatory = $true)][string]$RuntimeRoot)
 
     $plugins = Read-FactoryWebPlugins
+    $configuredNames = @($plugins | ForEach-Object { [string]$_.name })
+    foreach ($obsoleteName in @("@liustack/modlens")) {
+        if ($configuredNames -contains $obsoleteName) { continue }
+        $obsoletePath = Join-Path $RuntimeRoot ("node_modules\" + ($obsoleteName -replace '/', '\'))
+        if (Test-Path -LiteralPath $obsoletePath) {
+            Remove-Item -LiteralPath $obsoletePath -Recurse -Force
+            Write-Host "removed obsolete factory web plugin: $obsoleteName"
+        }
+    }
     $specs = @($plugins | ForEach-Object { "$($_.name)@$($_.spec)" })
     $scratch = Join-Path $env:TEMP "dsh-factory-web-plugins-$PID"
     New-Item -ItemType Directory -Force -Path $scratch | Out-Null
@@ -204,7 +303,7 @@ if (-not $SkipNpm) {
         Push-Location $scratch
         try {
             Write-Host "npm install @deepseek-ai/dsh@$DshVersion ..."
-            npm install --no-audit --no-fund --loglevel=error "@deepseek-ai/dsh@$DshVersion"
+            npm install --legacy-peer-deps --no-audit --no-fund --loglevel=error "@deepseek-ai/dsh@$DshVersion"
             if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
         } finally {
             Pop-Location
@@ -225,6 +324,10 @@ if (-not $SkipNpm) {
     }
 } elseif (-not (Test-Path -LiteralPath $dshRoot)) {
     throw "SkipNpm requires an existing runtime at $dshRoot"
+}
+
+if ($LocalHarnessRoot) {
+    Install-LocalHarnessOverlay $LocalHarnessRoot
 }
 
 # Official npm may hoist `commander` next to `@deepseek-ai/`. The 0.3.0

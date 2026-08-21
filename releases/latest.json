@@ -1,109 +1,126 @@
 {
-    "schemaVersion":  1,
-    "channel":  "stable",
-    "latest":  "0.3.1",
-    "releases":  [
-                     {
-                         "version":  "0.3.1",
-                         "releasedAt":  "2026-08-19T16:05:54Z",
-                         "notes":  {
-                                       "zh":  "运行时自带 ModLens 3.21.1 与 DSH-better-sidebar 0.13.1。首次启动会在 web profile 组合包列表里补上缺失项，不改用户 cordis.patch.yml。ModLens 仍需在 ~/.modlens/config.json 配置视觉引擎。纯文本 DeepSeek 读图走 modlens_read_image，Anchored Standard 的工具发现索引不再指向宿主 read_image。无边框窗口的最小化/最大化/关闭与右侧栏圆钮同一行、同尺寸同间距，空白新会话顶部可拖动。「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 ~/.dsh。",
-                                       "en":  "Ships @liustack/modlens@3.21.1 and dsh-better-sidebar@0.13.1 in the bundled runtime. First launch appends them to the web profile bundle list when missing; user cordis.patch.yml is unchanged. ModLens still needs an engine key in ~/.modlens/config.json. On text-only DeepSeek, image reads go through modlens_read_image; the Anchored Standard tool-discovery index no longer points at the host read_image. Frameless chrome keeps min/max/close in the Web UI header row as 28px circular rail buttons matching the better-sidebar cluster; Session log, the cluster, and caption buttons line up, and the blank-session hero can drag from the top 36px. Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in ~/.dsh."
-                                   },
-                         "artifacts":  {
-                                           "windows-x64":  {
-                                                               "kind":  "nsis",
-                                                               "filename":  "DeepSeek Harness_0.3.1_x64-setup.exe",
-                                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.1/DeepSeek.Harness_0.3.1_x64-setup.exe",
-                                                               "sha256":  "4ba04a152c53b6d72bf92a997f6e94467437872004a62db22812858fbf709070",
-                                                               "size":  149339409
-                                                           }
-                                       }
-                     },
-                     {
-                         "version":  "0.3.0",
-                         "releasedAt":  "2026-08-18T09:45:00Z",
-                         "notes":  {
-                                       "zh":  "运行时基线换成官方 @deepseek-ai/dsh@0.1.0-rc.7，并保留桌面侧成果：无边框 Tauri 壳、可调透明度的侧栏毛玻璃、代理端口回退、默认模型、Anchored Standard、prompt 导航、「已处理」过程折叠，以及去掉设置按钮上方的 session 列表底部渐变。窗口失焦后仍保留原生 Acrylic。设置里删除提供方或预设的确认框会显示在设置面板之上。首次启动完整性检查同时接受 hoist 与嵌套的 commander。「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 ~/.dsh。",
-                                       "en":  "Rebases the bundled harness onto official @deepseek-ai/dsh@0.1.0-rc.7 while keeping the desktop-specific work: frameless Tauri chrome, sidebar glass with a transparency slider, proxy-port fallback, default models, Anchored Standard, prompt navigation, collapsed process runs, and no session-list bottom fade above Settings. Native Acrylic remains after the window loses focus. Confirmation dialogs opened from Settings, including provider delete, now paint above the Settings overlay. First-launch completeness accepts npm-hoisted or nested commander. Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in ~/.dsh."
-                                   },
-                         "artifacts":  {
-                                           "windows-x64":  {
-                                                               "kind":  "nsis",
-                                                               "filename":  "DeepSeek Harness_0.3.0_x64-setup.exe",
-                                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.0/DeepSeek.Harness_0.3.0_x64-setup.exe",
-                                                               "sha256":  "111df282064b1687eefcee3262f4ee319dec2f5adb129092549032aba2a0bd10",
-                                                               "size":  95933981
-                                                           }
-                                       }
-                     },
-                     {
-                         "version":  "0.2.3",
-                         "releasedAt":  "2026-08-17T10:43:00Z",
-                         "notes":  {
-                                       "zh":  "选择 session 后一次性加载完整历史，移除「加载更早」；prompt 导航收录 steering/插话并使用独立悬浮胶囊，设置面板保持最高层级，侧边栏在浅色/深色主题下使用 60% 语义底色与 40% 背景采样的毛玻璃效果；Anchored Standard 作为默认模式归入自定义；移除 session 列表底部渐变边界，失焦后恢复原生 Acrylic，新增侧栏透明度滑块，并修复浅色主题浮层预览。进程 HTTP 直连超时只约束响应头，不再误杀仍在传输的模型 SSE。",
-                                       "en":  "Sessions now open with complete history and no Load earlier control; prompt navigation includes steering/interjection prompts in an independent floating capsule, Settings stays topmost, the sidebar uses a 60% semantic fill with 40% light/dark glass sampling, and Anchored Standard remains the default under Custom. This refresh also removes the session-list bottom fade, reapplies native Acrylic after focus loss, adds a sidebar-transparency slider, and fixes light-theme floating previews. Direct HTTP no longer aborts a live model SSE body after the 5s header budget."
-                                   },
-                         "artifacts":  {
-                                           "windows-x64":  {
-                                                               "kind":  "nsis",
-                                                               "filename":  "DeepSeek Harness_0.2.3_x64-setup.exe",
-                                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.3/DeepSeek.Harness_0.2.3_x64-setup.exe",
-                                                               "sha256":  "5703c2d1a21e8ba7b22a6e8ae3dae3647f9f97360e3d2446293e5c65ef184070",
-                                                               "size":  120367661
-                                                           }
-                                       }
-                     },
-                     {
-                         "version":  "0.2.2",
-                         "releasedAt":  "2026-08-16T17:13:04Z",
-                         "notes":  {
-                                       "zh":  "首次启动改为解到临时目录，先结束残留的 bundle-runtime/node.exe，再替换运行时目录，避免 Windows tar 被孤儿 Node 进程挡住。",
-                                       "en":  "First-launch unpack extracts into a staging directory, stops a leftover bundle-runtime/node.exe, then replaces the runtime folder so Windows tar is not blocked by an orphan Node process."
-                                   },
-                         "artifacts":  {
-                                           "windows-x64":  {
-                                                               "kind":  "nsis",
-                                                               "filename":  "DeepSeek Harness_0.2.2_x64-setup.exe",
-                                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.2/DeepSeek.Harness_0.2.2_x64-setup.exe",
-                                                               "sha256":  "00c865f62fcd2df3dfb09dc7878a7743c02e673f8ec14c028726f3a689eaf5ce",
-                                                               "size":  103062970
-                                                           }
-                                       }
-                     },
-                     {
-                         "version":  "0.2.1",
-                         "releasedAt":  "2026-08-16T13:26:37Z",
-                         "notes":  {
-                                       "zh":  "「检查更新」直连失败后走本地 HTTP 代理（默认 7897）。设置里可改代理端口。这不会启用 agent 的 web 工具。",
-                                       "en":  "Check for updates retries through the local HTTP proxy (default 7897) after a direct failure. Settings can change the port. This does not enable agent web tools."
-                                   },
-                         "artifacts":  {
-                                           "windows-x64":  {
-                                                               "kind":  "nsis",
-                                                               "filename":  "DeepSeek Harness_0.2.1_x64-setup.exe",
-                                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.1/DeepSeek.Harness_0.2.1_x64-setup.exe",
-                                                               "sha256":  "b8e89009b8d5829bf720913568102a1f9710d82e9fef209eb7096c3e551376ed",
-                                                               "size":  103055134
-                                                           }
-                                       }
-                     },
-                     {
-                         "version":  "0.2.0",
-                         "releasedAt":  "2026-08-16T12:10:00Z",
-                         "notes":  {
-                                       "zh":  "第一个可在设置中检查更新的桌面版本。安装包按 releases/\u003cversion\u003e/ 保存，不再覆盖上一版。用户数据仍在 ~/.dsh。",
-                                       "en":  "First desktop build that can check for updates from Settings. Installers live under releases/\u003cversion\u003e/ instead of overwriting the previous file. User data stays in ~/.dsh."
-                                   },
-                         "artifacts":  {
-                                           "windows-x64":  {
-                                                               "kind":  "nsis",
-                                                               "filename":  "DeepSeek Harness_0.2.0_x64-setup.exe",
-                                                               "url":  "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.0/DeepSeek.Harness_0.2.0_x64-setup.exe",
-                                                               "sha256":  "486799dc5cb6aa7aa96e4bdc10bdcd6e98283264f9a7540f8713e411b75f9189",
-                                                               "size":  102658606
-                                                           }
-                                       }
-                     }
-                 ]
+  "schemaVersion": 1,
+  "channel": "stable",
+  "latest": "0.3.2",
+  "releases": [
+    {
+      "version": "0.3.2",
+      "releasedAt": "2026-08-21T13:08:28Z",
+      "notes": {
+        "zh": "运行时以官方 @deepseek-ai/dsh@0.1.1-rc.1 为基线，并叠加个人 fork 的会话/进程 UI、prompt 导航、代理回退和原生附件改动。官方 baseline 已原生提供多模态视觉输入、持久化图片附件和受附件能力门控的 read_image，因此新版桌面移除 ModLens，只保留 dsh-better-sidebar@0.13.1；用户数据仍在 ~/.dsh。",
+        "en": "Rebases the runtime on official @deepseek-ai/dsh@0.1.1-rc.1 and overlays the personal fork's session/process UI, prompt navigation, proxy fallback, and native attachment changes. The baseline natively provides multimodal vision input, durable image attachments, and attachment-gated read_image, so ModLens is removed and only dsh-better-sidebar@0.13.1 remains; user data stays in ~/.dsh."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.3.2_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.2/DeepSeek.Harness_0.3.2_x64-setup.exe",
+          "sha256": "34d31ed22ec48341c675384cb00e6bd2560b97122d363c70d8db1729013b8d8e",
+          "size": 156031910
+        }
+      }
+    },
+    {
+      "version": "0.3.1",
+      "releasedAt": "2026-08-19T16:05:54Z",
+      "notes": {
+        "zh": "运行时自带 ModLens 3.21.1 与 DSH-better-sidebar 0.13.1。首次启动会在 web profile 组合包列表里补上缺失项，不改用户 cordis.patch.yml。ModLens 仍需在 ~/.modlens/config.json 配置视觉引擎。纯文本 DeepSeek 读图走 modlens_read_image，Anchored Standard 的工具发现索引不再指向宿主 read_image。无边框窗口的最小化/最大化/关闭与右侧栏圆钮同一行、同尺寸同间距，空白新会话顶部可拖动。「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 ~/.dsh。",
+        "en": "Ships @liustack/modlens@3.21.1 and dsh-better-sidebar@0.13.1 in the bundled runtime. First launch appends them to the web profile bundle list when missing; user cordis.patch.yml is unchanged. ModLens still needs an engine key in ~/.modlens/config.json. On text-only DeepSeek, image reads go through modlens_read_image; the Anchored Standard tool-discovery index no longer points at the host read_image. Frameless chrome keeps min/max/close in the Web UI header row as 28px circular rail buttons matching the better-sidebar cluster; Session log, the cluster, and caption buttons line up, and the blank-session hero can drag from the top 36px. Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in ~/.dsh."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.3.1_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.1/DeepSeek.Harness_0.3.1_x64-setup.exe",
+          "sha256": "4ba04a152c53b6d72bf92a997f6e94467437872004a62db22812858fbf709070",
+          "size": 149339409
+        }
+      }
+    },
+    {
+      "version": "0.3.0",
+      "releasedAt": "2026-08-18T09:45:00Z",
+      "notes": {
+        "zh": "运行时基线换成官方 @deepseek-ai/dsh@0.1.0-rc.7，并保留桌面侧成果：无边框 Tauri 壳、可调透明度的侧栏毛玻璃、代理端口回退、默认模型、Anchored Standard、prompt 导航、「已处理」过程折叠，以及去掉设置按钮上方的 session 列表底部渐变。窗口失焦后仍保留原生 Acrylic。设置里删除提供方或预设的确认框会显示在设置面板之上。首次启动完整性检查同时接受 hoist 与嵌套的 commander。「检查更新」、本地 HTTP 代理与智能体 web 工具仍分属不同平面。用户数据仍在 ~/.dsh。",
+        "en": "Rebases the bundled harness onto official @deepseek-ai/dsh@0.1.0-rc.7 while keeping the desktop-specific work: frameless Tauri chrome, sidebar glass with a transparency slider, proxy-port fallback, default models, Anchored Standard, prompt navigation, collapsed process runs, and no session-list bottom fade above Settings. Native Acrylic remains after the window loses focus. Confirmation dialogs opened from Settings, including provider delete, now paint above the Settings overlay. First-launch completeness accepts npm-hoisted or nested commander. Check for updates, the local HTTP proxy, and agent web tools stay on separate planes. User data remains in ~/.dsh."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.3.0_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.0/DeepSeek.Harness_0.3.0_x64-setup.exe",
+          "sha256": "111df282064b1687eefcee3262f4ee319dec2f5adb129092549032aba2a0bd10",
+          "size": 95933981
+        }
+      }
+    },
+    {
+      "version": "0.2.3",
+      "releasedAt": "2026-08-17T10:43:00Z",
+      "notes": {
+        "zh": "选择 session 后一次性加载完整历史，移除「加载更早」；prompt 导航收录 steering/插话并使用独立悬浮胶囊，设置面板保持最高层级，侧边栏在浅色/深色主题下使用 60% 语义底色与 40% 背景采样的毛玻璃效果；Anchored Standard 作为默认模式归入自定义；移除 session 列表底部渐变边界，失焦后恢复原生 Acrylic，新增侧栏透明度滑块，并修复浅色主题浮层预览。进程 HTTP 直连超时只约束响应头，不再误杀仍在传输的模型 SSE。",
+        "en": "Sessions now open with complete history and no Load earlier control; prompt navigation includes steering/interjection prompts in an independent floating capsule, Settings stays topmost, the sidebar uses a 60% semantic fill with 40% light/dark glass sampling, and Anchored Standard remains the default under Custom. This refresh also removes the session-list bottom fade, reapplies native Acrylic after focus loss, adds a sidebar-transparency slider, and fixes light-theme floating previews. Direct HTTP no longer aborts a live model SSE body after the 5s header budget."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.2.3_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.3/DeepSeek.Harness_0.2.3_x64-setup.exe",
+          "sha256": "5703c2d1a21e8ba7b22a6e8ae3dae3647f9f97360e3d2446293e5c65ef184070",
+          "size": 120367661
+        }
+      }
+    },
+    {
+      "version": "0.2.2",
+      "releasedAt": "2026-08-16T17:13:04Z",
+      "notes": {
+        "zh": "首次启动改为解到临时目录，先结束残留的 bundle-runtime/node.exe，再替换运行时目录，避免 Windows tar 被孤儿 Node 进程挡住。",
+        "en": "First-launch unpack extracts into a staging directory, stops a leftover bundle-runtime/node.exe, then replaces the runtime folder so Windows tar is not blocked by an orphan Node process."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.2.2_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.2/DeepSeek.Harness_0.2.2_x64-setup.exe",
+          "sha256": "00c865f62fcd2df3dfb09dc7878a7743c02e673f8ec14c028726f3a689eaf5ce",
+          "size": 103062970
+        }
+      }
+    },
+    {
+      "version": "0.2.1",
+      "releasedAt": "2026-08-16T13:26:37Z",
+      "notes": {
+        "zh": "「检查更新」直连失败后走本地 HTTP 代理（默认 7897）。设置里可改代理端口。这不会启用 agent 的 web 工具。",
+        "en": "Check for updates retries through the local HTTP proxy (default 7897) after a direct failure. Settings can change the port. This does not enable agent web tools."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.2.1_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.1/DeepSeek.Harness_0.2.1_x64-setup.exe",
+          "sha256": "b8e89009b8d5829bf720913568102a1f9710d82e9fef209eb7096c3e551376ed",
+          "size": 103055134
+        }
+      }
+    },
+    {
+      "version": "0.2.0",
+      "releasedAt": "2026-08-16T12:10:00Z",
+      "notes": {
+        "zh": "第一个可在设置中检查更新的桌面版本。安装包按 releases/<version>/ 保存，不再覆盖上一版。用户数据仍在 ~/.dsh。",
+        "en": "First desktop build that can check for updates from Settings. Installers live under releases/<version>/ instead of overwriting the previous file. User data stays in ~/.dsh."
+      },
+      "artifacts": {
+        "windows-x64": {
+          "kind": "nsis",
+          "filename": "DeepSeek Harness_0.2.0_x64-setup.exe",
+          "url": "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.2.0/DeepSeek.Harness_0.2.0_x64-setup.exe",
+          "sha256": "486799dc5cb6aa7aa96e4bdc10bdcd6e98283264f9a7540f8713e411b75f9189",
+          "size": 102658606
+        }
+      }
+    }
+  ]
 }

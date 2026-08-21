@@ -63,10 +63,10 @@ black-background logo style.
 ## Build
 
 ```powershell
-# 1. (Re)bundle the dsh runtime — copies node.exe and the official
-#    @deepseek-ai/dsh npm package into bundle-runtime/, then packs
-#    bundle-runtime.zip for the installer
-.\scripts\bundle-runtime.ps1
+# 1. (Re)bundle the dsh runtime — install the official 0.1.1-rc.1 baseline,
+#    overlay the locally built fork, then pack bundle-runtime.zip
+.\scripts\bundle-runtime.ps1 -DshVersion "0.1.1-rc.1" `
+  -LocalHarnessRoot "..\deepseek-harness"
 
 # 2. Install JS tooling (Tauri CLI + icon renderer)
 npm install
@@ -77,7 +77,8 @@ npm run icon
 
 # 4. Build the app + NSIS installer (output: src-tauri/target/release/bundle/
 #    and a versioned copy under releases/<version>/)
-.\scripts\build.ps1
+.\scripts\build.ps1 -DshVersion "0.1.1-rc.1" `
+  -LocalHarnessRoot "..\deepseek-harness"
 
 # Development run (spawns the server, opens the window, no installer)
 npm run dev
@@ -85,11 +86,12 @@ npm run dev
 
 ## Updating the bundled DeepSeek Harness version
 
-The runtime under `bundle-runtime/node_modules/@deepseek-ai/dsh` is a plain npm
-installation. To move to a newer release, edit the version in
-`scripts/bundle-runtime.ps1` (or install into a scratch directory), copy it over
-the existing tree, re-run `npm run icon:render` (the whale path is read from the
-new bundle), and rebuild.
+The runtime under `bundle-runtime/node_modules/@deepseek-ai/dsh` starts from a
+published npm installation. For a personal fork build, pass the local
+`deepseek-harness` checkout with `-LocalHarnessRoot`; the bundler overlays its
+built host/client libraries, web frontend `dist/`, CLI config, and web patch
+onto the official baseline. The official `0.1.1-rc.1` baseline includes native
+multimodal input and `read_image`, so this desktop no longer bundles ModLens.
 
 ## Layout
 
