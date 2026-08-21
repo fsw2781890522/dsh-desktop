@@ -36,10 +36,39 @@ function Copy-TreeContents {
     }
 }
 
+function Assert-OfficialClientBuild {
+    param([Parameter(Mandatory = $true)][string]$HarnessRoot)
+
+    $recordPath = Join-Path $HarnessRoot ".dsh-build\client-build-environment.json"
+    if (-not (Test-Path -LiteralPath $recordPath)) {
+        throw "local harness client build record missing: $recordPath; run pnpm run build:official before bundling"
+    }
+    try {
+        $record = Get-Content -Raw -LiteralPath $recordPath | ConvertFrom-Json
+    } catch {
+        throw "local harness client build record is invalid JSON: $recordPath"
+    }
+    $profile = [string]$record.environment.DSH_CLIENT_BUILD_PROFILE
+    $title = [string]$record.environment.DSH_CLIENT_TITLE
+    if ($profile -ne "official" -or $title -ne "DeepSeek Harness") {
+        throw "local harness client artifacts are not built with the official branding profile; run pnpm run build:official"
+    }
+
+    $indexPath = Join-Path $HarnessRoot "apps\web\dist\index.html"
+    if (-not (Test-Path -LiteralPath $indexPath)) {
+        throw "local harness web frontend dist missing: $indexPath"
+    }
+    $index = Get-Content -Raw -LiteralPath $indexPath
+    if ($index -notmatch '<title>DeepSeek Harness</title>') {
+        throw "local harness web frontend does not carry the official DeepSeek Harness title: $indexPath"
+    }
+}
+
 function Install-LocalHarnessOverlay {
     param([Parameter(Mandatory = $true)][string]$HarnessRoot)
 
     $resolvedRoot = [System.IO.Path]::GetFullPath($HarnessRoot)
+    Assert-OfficialClientBuild $resolvedRoot
     $localCli = Join-Path $resolvedRoot "apps\cli"
     if (-not (Test-Path -LiteralPath (Join-Path $localCli "package.json"))) {
         throw "local harness checkout has no apps/cli package: $resolvedRoot"

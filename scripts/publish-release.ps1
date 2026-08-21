@@ -31,7 +31,6 @@ $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $destExe).Hash.ToLowerInvar
 $size = (Get-Item -LiteralPath $destExe).Length
 $sums = Join-Path $destDir "SHA256SUMS"
 Set-Content -LiteralPath $sums -Value "$hash  $nsisName`n" -NoNewline
-Add-Content -LiteralPath $sums -Value ""
 
 $full = (Resolve-Path -LiteralPath $destExe).Path
 $url = "file:///" + ($full -replace '\\', '/')

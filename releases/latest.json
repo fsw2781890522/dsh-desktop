@@ -5,18 +5,18 @@
   "releases": [
     {
       "version": "0.3.2",
-      "releasedAt": "2026-08-21T16:29:04Z",
+      "releasedAt": "2026-08-21T16:53:19Z",
       "notes": {
-        "zh": "运行时以官方 @deepseek-ai/dsh@0.1.1-rc.1 为基线，并叠加个人 fork 的会话/进程 UI、prompt 导航、代理回退和原生附件改动。官方 baseline 已原生提供多模态视觉输入、持久化图片附件和受附件能力门控的 read_image，因此新版桌面移除 ModLens，只保留 dsh-better-sidebar@0.13.1；对仍引用已退役 @deepseek-ai/dsh-client-web-react 的 0.3.1 个人 profile 插件加入桌面兼容桥，并修复安装后 Failed to load plugins；用户数据仍在 ~/.dsh。",
-        "en": "Rebases the runtime on official @deepseek-ai/dsh@0.1.1-rc.1 and overlays the personal fork session/process UI, prompt navigation, proxy fallback, and native attachment changes. The baseline natively provides multimodal vision input, durable image attachments, and attachment-gated read_image, so ModLens is removed and only dsh-better-sidebar@0.13.1 remains. A desktop compatibility bridge keeps 0.3.1-era personal profile plugins that import retired @deepseek-ai/dsh-client-web-react working and fixes the post-install Failed to load plugins error; user data stays in ~/.dsh."
+        "zh": "以官方 @deepseek-ai/dsh@0.1.1-rc.1 为基线，并叠加个人 fork 的会话/进程 UI、prompt 导航、代理回退和原生附件改动。官方 baseline 原生提供多模态视觉输入、持久化图片附件和受附件能力门控的 read_image，因此移除 ModLens，仅保留 dsh-better-sidebar@0.13.1。修复 0.3.1 旧 profile 对已退役 @deepseek-ai/dsh-client-web-react 的兼容问题。桌面打包现在强制使用官方 client build profile，保留官方 DeepSeek Harness logo/wordmark，并拒绝 DSH Local Build 非官方构建；用户数据仍在 ~/.dsh。更新源仅使用 fsw2781890522/dsh-desktop Releases。",
+        "en": "Rebases the runtime on official @deepseek-ai/dsh@0.1.1-rc.1 and overlays the personal fork session/process UI, prompt navigation, proxy fallback, and native attachment changes. The official baseline natively provides multimodal vision input, durable image attachments, and attachment-gated read_image, so ModLens is removed and only dsh-better-sidebar@0.13.1 remains. Fixes compatibility for 0.3.1-era profiles that import retired @deepseek-ai/dsh-client-web-react. Desktop packaging now requires the official client build profile, preserves the official DeepSeek Harness logo/wordmark, and rejects non-official DSH Local Build output; user data stays in ~/.dsh. Update discovery uses only fsw2781890522/dsh-desktop Releases."
       },
       "artifacts": {
         "windows-x64": {
           "kind": "nsis",
           "filename": "DeepSeek Harness_0.3.2_x64-setup.exe",
           "url": "file:///C:/Users/admin/projects/dsh-desktop/releases/0.3.2/DeepSeek Harness_0.3.2_x64-setup.exe",
-          "sha256": "b3e335102e4baff70497699f53d246b9d810b3dce06bb090990224acd2ef3995",
-          "size": 156193082
+          "sha256": "db2c42d4ca42a444d36bc421a5ca38d00cc25c0c4df53efe4aad4fe5ba718eed",
+          "size": 156193937
         }
       }
     },

@@ -65,6 +65,9 @@ black-background logo style.
 ```powershell
 # 1. (Re)bundle the dsh runtime — install the official 0.1.1-rc.1 baseline,
 #    overlay the locally built fork, then pack bundle-runtime.zip
+Push-Location ..\deepseek-harness
+pnpm run build:official
+Pop-Location
 .\scripts\bundle-runtime.ps1 -DshVersion "0.1.1-rc.1" `
   -LocalHarnessRoot "..\deepseek-harness"
 
@@ -92,6 +95,9 @@ published npm installation. For a personal fork build, pass the local
 built host/client libraries, web frontend `dist/`, CLI config, and web patch
 onto the official baseline. The official `0.1.1-rc.1` baseline includes native
 multimodal input and `read_image`, so this desktop no longer bundles ModLens.
+Run `pnpm run build:official` in that checkout first. The desktop bundler
+rejects incomplete or non-official client build records so a local-build label
+cannot replace the upstream DeepSeek Harness wordmark in a release installer.
 
 ## Layout
 
