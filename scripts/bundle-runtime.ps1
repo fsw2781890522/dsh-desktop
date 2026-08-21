@@ -54,42 +54,143 @@ function Install-LocalHarnessOverlay {
         Write-Warning "using existing runtime dependency closure $($runtimePackage.version) while overlaying local dsh $($localPackage.version)"
     }
 
-    Copy-TreeContents (Join-Path $localCli "lib") (Join-Path $dshRoot "lib")
-    Copy-TreeContents (Join-Path $localCli "config") (Join-Path $dshRoot "config")
-    if ([string]$runtimePackage.version -ne [string]$localPackage.version) {
-        $runtimePackage.version = [string]$localPackage.version
-        $utf8 = New-Object System.Text.UTF8Encoding $false
-        $runtimePackageJson = ($runtimePackage | ConvertTo-Json -Depth 100).TrimEnd() + "`n"
-        [System.IO.File]::WriteAllText((Join-Path $dshRoot "package.json"), $runtimePackageJson, $utf8)
-    }
-
-    $runtimeDependencyNames = @()
-    foreach ($sectionName in @("dependencies", "optionalDependencies")) {
-        $section = $localPackage.$sectionName
-        if ($null -ne $section) {
-            $runtimeDependencyNames += @($section.psobject.Properties.Name | Where-Object { $_.StartsWith("@deepseek-ai/") })
-        }
-    }
-
-    $packageCount = 0
+    # Build a source-package index first. The old overlay copied libraries for
+    # packages that already existed in the npm tree, but only materialized
+    # direct CLI dependencies. That left newer transitive packages (notably
+    # dsh-client-ui-reference) absent while their callers were overlaid.
+    $localPackages = @{}
     foreach ($rootName in @("vendor", "packages", "apps")) {
         $sourceRoot = Join-Path $resolvedRoot $rootName
         if (-not (Test-Path -LiteralPath $sourceRoot)) { continue }
         Get-ChildItem -LiteralPath $sourceRoot -Filter package.json -Recurse -File | ForEach-Object {
+            if ($_.FullName -match "[\\/]node_modules[\\/]") { return }
             $sourcePackage = Get-Content -Raw -LiteralPath $_.FullName | ConvertFrom-Json
             $packageName = [string]$sourcePackage.name
             if (-not $packageName.StartsWith("@deepseek-ai/")) { return }
             $sourceLib = Join-Path $_.Directory.FullName "lib"
             if (-not (Test-Path -LiteralPath $sourceLib)) { return }
-            $targetPackage = Join-Path $runtime ("node_modules\" + ($packageName -replace '/', '\'))
-            if (-not (Test-Path -LiteralPath (Join-Path $targetPackage "package.json"))) {
-                if (-not ($runtimeDependencyNames -contains $packageName)) { return }
-                New-Item -ItemType Directory -Force -Path $targetPackage | Out-Null
-                Copy-Item -Force -LiteralPath $_.FullName -Destination (Join-Path $targetPackage "package.json")
-                Write-Host "materialized local runtime dependency: $packageName"
+            if (-not $localPackages.ContainsKey($packageName)) {
+                $localPackages[$packageName] = $_.Directory.FullName
             }
-            Copy-TreeContents $sourceLib (Join-Path $targetPackage "lib")
-            $packageCount += 1
+        }
+    }
+    if (-not $localPackages.ContainsKey([string]$localPackage.name)) {
+        throw "local harness package is not available in the source index: $($localPackage.name)"
+    }
+
+    # pnpm keeps packages in node_modules/.pnpm and may not expose every
+    # production dependency through the workspace root. Index those real
+    # package directories so the overlay can close external dependencies such
+    # as `open` without reaching the network during a release build.
+    $localNodeModules = Join-Path $resolvedRoot "node_modules"
+    $localPnpmPackages = @{}
+    $localPnpmRoot = Join-Path $localNodeModules ".pnpm"
+    if (Test-Path -LiteralPath $localPnpmRoot) {
+        Get-ChildItem -LiteralPath $localPnpmRoot -Filter package.json -Recurse -File | ForEach-Object {
+            $sourcePackage = Get-Content -Raw -LiteralPath $_.FullName | ConvertFrom-Json
+            $packageName = [string]$sourcePackage.name
+            if ($packageName -and -not $localPnpmPackages.ContainsKey($packageName)) {
+                $localPnpmPackages[$packageName] = $_.Directory.FullName
+            }
+        }
+    }
+
+    $resolveLocalPackage = {
+        param([Parameter(Mandatory = $true)][string]$PackageName)
+        if ($localPackages.ContainsKey($PackageName)) {
+            return [string]$localPackages[$PackageName]
+        }
+        $direct = Join-Path $localNodeModules ("$($PackageName -replace '/', '\')\package.json")
+        if (Test-Path -LiteralPath $direct) {
+            return (Split-Path -Parent $direct)
+        }
+        if ($localPnpmPackages.ContainsKey($PackageName)) {
+            return [string]$localPnpmPackages[$PackageName]
+        }
+        return $null
+    }
+
+    $dependencyNames = {
+        param([Parameter(Mandatory = $true)]$Manifest)
+        $names = @()
+        foreach ($sectionName in @("dependencies", "optionalDependencies", "peerDependencies")) {
+            $section = $Manifest.$sectionName
+            if ($null -ne $section) {
+                $names += @($section.psobject.Properties.Name)
+            }
+        }
+        return @($names | Sort-Object -Unique)
+    }
+
+    $copyPackageContents = {
+        param(
+            [Parameter(Mandatory = $true)][string]$Source,
+            [Parameter(Mandatory = $true)][string]$Destination
+        )
+        New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+        Get-ChildItem -LiteralPath $Source -Force | Where-Object { $_.Name -ne "node_modules" } | ForEach-Object {
+            $destinationPath = Join-Path $Destination $_.Name
+            if (Test-Path -LiteralPath $destinationPath) {
+                Remove-Item -LiteralPath $destinationPath -Recurse -Force
+            }
+            Copy-Item -Recurse -Force -LiteralPath $_.FullName -Destination $destinationPath
+        }
+    }
+
+    # Overlay the local dsh package and its complete production dependency
+    # graph. Local @deepseek-ai packages always win; existing external npm
+    # packages are retained, and only missing external packages are copied
+    # from the local pnpm store.
+    $queue = [System.Collections.Generic.Queue[string]]::new()
+    $queue.Enqueue([string]$localPackage.name)
+    $visited = @{}
+    $packageCount = 0
+    while ($queue.Count -gt 0) {
+        $packageName = $queue.Dequeue()
+        if ($visited.ContainsKey($packageName)) { continue }
+        $visited[$packageName] = $true
+
+        $targetPackage = Join-Path $runtime ("node_modules\" + ($packageName -replace '/', '\'))
+        $sourcePackageDir = & $resolveLocalPackage $packageName
+        $manifest = $null
+        if ($sourcePackageDir) {
+            $sourceManifestPath = Join-Path $sourcePackageDir "package.json"
+            $manifest = Get-Content -Raw -LiteralPath $sourceManifestPath | ConvertFrom-Json
+            if ([string]$manifest.name -like "@deepseek-ai/*") {
+                New-Item -ItemType Directory -Force -Path $targetPackage | Out-Null
+                Copy-Item -Force -LiteralPath $sourceManifestPath -Destination (Join-Path $targetPackage "package.json")
+                $sourceLib = Join-Path $sourcePackageDir "lib"
+                if (Test-Path -LiteralPath $sourceLib) {
+                    Copy-TreeContents $sourceLib (Join-Path $targetPackage "lib")
+                }
+                if ($packageName -eq "@deepseek-ai/dsh") {
+                    $sourceConfig = Join-Path $sourcePackageDir "config"
+                    if (Test-Path -LiteralPath $sourceConfig) {
+                        Copy-TreeContents $sourceConfig (Join-Path $targetPackage "config")
+                    }
+                }
+                $packageCount += 1
+            } elseif (-not (Test-Path -LiteralPath (Join-Path $targetPackage "package.json"))) {
+                & $copyPackageContents $sourcePackageDir $targetPackage
+            }
+        } elseif (Test-Path -LiteralPath (Join-Path $targetPackage "package.json")) {
+            $manifest = Get-Content -Raw -LiteralPath (Join-Path $targetPackage "package.json") | ConvertFrom-Json
+        } else {
+            Write-Warning "local overlay dependency is unavailable: $packageName"
+            continue
+        }
+
+        foreach ($dependencyName in (& $dependencyNames $manifest)) {
+            $queue.Enqueue([string]$dependencyName)
+        }
+    }
+
+    foreach ($requiredPackage in @(
+        "node_modules/@deepseek-ai/dsh-web-app/package.json",
+        "node_modules/@deepseek-ai/dsh-client-ui-reference/package.json"
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $runtime $requiredPackage))) {
+            throw "local harness overlay did not materialize required package: $requiredPackage"
         }
     }
 
@@ -103,7 +204,7 @@ function Install-LocalHarnessOverlay {
         throw "local web-app patch missing: $localWebPatch"
     }
     Copy-Item -Force -LiteralPath $localWebPatch -Destination $runtimeWebPatch
-    Write-Host "local harness overlay: dsh $($localPackage.version), $packageCount package libraries, web frontend dist"
+    Write-Host "local harness overlay: dsh $($localPackage.version), $packageCount package libraries, dependency closure, web frontend dist"
 }
 
 function Install-FactoryPresets {
@@ -350,7 +451,16 @@ Install-FactoryPresets $dshRoot
 # --- 3b. Factory web plugins (profile bundles resolved from this tree) ---
 Install-FactoryWebPlugins $runtime
 
-# --- 4. Smoke check: the bundled runtime must answer dsh --version ---
+# --- 4. Smoke checks: validate the overlaid web dependency closure and dsh ---
+$webImportProbe = "await import('@deepseek-ai/dsh-client-ui-reference'); await import('@deepseek-ai/dsh-web-app');"
+Push-Location $runtime
+try {
+    & ".\node.exe" "--input-type=module" "--eval" $webImportProbe
+} finally {
+    Pop-Location
+}
+if ($LASTEXITCODE -ne 0) { throw "bundled runtime failed its web dependency import smoke check" }
+
 & (Join-Path $runtime "node.exe") (Join-Path $dshRoot "lib\bin.js") --version
 if ($LASTEXITCODE -ne 0) { throw "bundled runtime failed its version smoke check" }
 

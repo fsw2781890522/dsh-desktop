@@ -117,6 +117,14 @@ const DSH_BIN_REL: &str = "node_modules/@deepseek-ai/dsh/lib/bin.js";
 const COMMANDER_NESTED_REL: &str =
     "node_modules/@deepseek-ai/dsh/node_modules/commander/package.json";
 const COMMANDER_HOISTED_REL: &str = "node_modules/commander/package.json";
+/// The web overlay is a local build of the 0.1.1-rc.1 baseline. These
+/// manifests are the minimum dependency surface needed to reject the mixed
+/// npm/local tree that otherwise reaches startup and fails with
+/// `ERR_MODULE_NOT_FOUND` from the user's profile.
+const WEB_APP_MANIFEST_REL: &str = "node_modules/@deepseek-ai/dsh-web-app/package.json";
+const UI_REFERENCE_MANIFEST_REL: &str =
+    "node_modules/@deepseek-ai/dsh-client-ui-reference/package.json";
+const OPEN_MANIFEST_REL: &str = "node_modules/open/package.json";
 
 /// Tauri's `resource_dir()` returns `\\?\`-prefixed verbatim paths on
 /// Windows; child processes (node, tar) reject those.
@@ -144,8 +152,21 @@ fn commander_present(root: &Path) -> bool {
     root.join(COMMANDER_NESTED_REL).is_file() || root.join(COMMANDER_HOISTED_REL).is_file()
 }
 
+fn web_runtime_dependency_closure_present(root: &Path) -> bool {
+    [
+        WEB_APP_MANIFEST_REL,
+        UI_REFERENCE_MANIFEST_REL,
+        OPEN_MANIFEST_REL,
+    ]
+    .iter()
+    .all(|relative| root.join(relative).is_file())
+}
+
 fn runtime_complete(root: &Path) -> bool {
-    root.join("node.exe").is_file() && root.join(DSH_BIN_REL).is_file() && commander_present(root)
+    root.join("node.exe").is_file()
+        && root.join(DSH_BIN_REL).is_file()
+        && commander_present(root)
+        && web_runtime_dependency_closure_present(root)
 }
 
 fn zip_stamp(zip: &Path) -> String {
@@ -347,7 +368,7 @@ fn ensure_runtime(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
             extract_zip(&zip, &dest)?;
             if !runtime_complete(&dest) {
                 return Err(
-                    "the unpacked runtime is missing node.exe, the dsh CLI, or commander"
+                    "the unpacked runtime is missing node.exe, the dsh CLI, commander, or the web dependency closure"
                         .to_string(),
                 );
             }
@@ -452,34 +473,56 @@ fn ensure_factory_web_plugin_bundles_in(home: &Path, runtime: &Path) -> Result<(
         })?
     };
 
-    let bundles = manifest
-        .pointer_mut("/dsh/profile/bundles")
-        .and_then(|value| value.as_array_mut());
-    let bundles = match bundles {
-        Some(bundles) => bundles,
-        None => {
-            if manifest.get("dsh").is_none() {
-                manifest["dsh"] = serde_json::json!({ "profile": { "bundles": [] } });
-            } else if manifest["dsh"].get("profile").is_none() {
-                manifest["dsh"]["profile"] = serde_json::json!({ "bundles": [] });
-            } else {
-                manifest["dsh"]["profile"]["bundles"] = serde_json::json!([]);
-            }
-            manifest
-                .pointer_mut("/dsh/profile/bundles")
-                .and_then(|value| value.as_array_mut())
-                .ok_or_else(|| "web profile manifest could not hold a bundles array".to_string())?
-        }
-    };
-
     let mut changed = created;
-    for name in &names {
-        if !bundles
-            .iter()
-            .any(|value| value.as_str() == Some(name.as_str()))
+    {
+        let bundles = manifest
+            .pointer_mut("/dsh/profile/bundles")
+            .and_then(|value| value.as_array_mut());
+        let bundles = match bundles {
+            Some(bundles) => bundles,
+            None => {
+                if manifest.get("dsh").is_none() {
+                    manifest["dsh"] = serde_json::json!({ "profile": { "bundles": [] } });
+                } else if manifest["dsh"].get("profile").is_none() {
+                    manifest["dsh"]["profile"] = serde_json::json!({ "bundles": [] });
+                } else {
+                    manifest["dsh"]["profile"]["bundles"] = serde_json::json!([]);
+                }
+                manifest
+                    .pointer_mut("/dsh/profile/bundles")
+                    .and_then(|value| value.as_array_mut())
+                    .ok_or_else(|| {
+                        "web profile manifest could not hold a bundles array".to_string()
+                    })?
+            }
+        };
+
+        // ModLens was the 0.3.1 image/reference bridge. The 0.3.2 web
+        // baseline owns the native multimodal path, so retire the shipped
+        // bundle from existing profiles while leaving user patch YAML alone.
+        if !names.iter().any(|name| name == "@liustack/modlens") {
+            let before = bundles.len();
+            bundles.retain(|value| value.as_str() != Some("@liustack/modlens"));
+            changed |= bundles.len() != before;
+        }
+
+        for name in &names {
+            if !bundles
+                .iter()
+                .any(|value| value.as_str() == Some(name.as_str()))
+            {
+                bundles.push(serde_json::Value::String(name.clone()));
+                changed = true;
+            }
+        }
+    }
+
+    if !names.iter().any(|name| name == "@liustack/modlens") {
+        if let Some(dependencies) = manifest
+            .get_mut("dependencies")
+            .and_then(|value| value.as_object_mut())
         {
-            bundles.push(serde_json::Value::String(name.clone()));
-            changed = true;
+            changed |= dependencies.remove("@liustack/modlens").is_some();
         }
     }
     if changed {
@@ -919,6 +962,24 @@ mod tests {
         std::fs::write(root.join("node.exe"), node_contents).unwrap();
         std::fs::write(root.join(DSH_BIN_REL), b"bin").unwrap();
         std::fs::write(root.join(COMMANDER_NESTED_REL), b"{}").unwrap();
+        for relative in [
+            WEB_APP_MANIFEST_REL,
+            UI_REFERENCE_MANIFEST_REL,
+            OPEN_MANIFEST_REL,
+        ] {
+            let path = root.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"{}").unwrap();
+        }
+    }
+
+    fn write_runtime_tree_without_web_closure(root: &Path, node_contents: &[u8]) {
+        std::fs::create_dir_all(root.join("node_modules/@deepseek-ai/dsh/lib")).unwrap();
+        std::fs::create_dir_all(root.join("node_modules/@deepseek-ai/dsh/node_modules/commander"))
+            .unwrap();
+        std::fs::write(root.join("node.exe"), node_contents).unwrap();
+        std::fs::write(root.join(DSH_BIN_REL), b"bin").unwrap();
+        std::fs::write(root.join(COMMANDER_NESTED_REL), b"{}").unwrap();
     }
 
     fn pack_zip(src: &Path, zip: &Path) {
@@ -970,12 +1031,43 @@ mod tests {
         std::fs::write(hoisted.join("node.exe"), b"node").unwrap();
         std::fs::write(hoisted.join(DSH_BIN_REL), b"bin").unwrap();
         std::fs::write(hoisted.join(COMMANDER_HOISTED_REL), b"{}").unwrap();
+        for relative in [
+            WEB_APP_MANIFEST_REL,
+            UI_REFERENCE_MANIFEST_REL,
+            OPEN_MANIFEST_REL,
+        ] {
+            let path = hoisted.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"{}").unwrap();
+        }
         assert!(runtime_complete(&hoisted));
         std::fs::remove_file(hoisted.join(COMMANDER_HOISTED_REL)).unwrap();
         assert!(!runtime_complete(&hoisted));
 
         let _ = std::fs::remove_dir_all(&nested);
         let _ = std::fs::remove_dir_all(&hoisted);
+    }
+
+    #[test]
+    fn runtime_complete_rejects_missing_web_runtime_dependency_closure() {
+        let root = unique_temp("complete-web-closure");
+        write_runtime_tree_without_web_closure(&root, b"node");
+        assert!(!runtime_complete(&root));
+
+        for relative in [
+            "node_modules/@deepseek-ai/dsh-web-app/package.json",
+            "node_modules/@deepseek-ai/dsh-client-ui-reference/package.json",
+            "node_modules/open/package.json",
+        ] {
+            let path = root.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"{}").unwrap();
+        }
+        assert!(runtime_complete(&root));
+
+        std::fs::remove_file(root.join("node_modules/open/package.json")).unwrap();
+        assert!(!runtime_complete(&root));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -1093,6 +1185,56 @@ mod tests {
                 "dsh-better-sidebar"
             ]
         );
+        let _ = std::fs::remove_dir_all(&home);
+        let _ = std::fs::remove_dir_all(&runtime);
+    }
+
+    #[test]
+    fn factory_web_plugins_remove_retired_modlens_from_existing_profile() {
+        let home = unique_temp("plugins-retire-modlens-home");
+        let runtime = unique_temp("plugins-retire-modlens-runtime");
+        let profile = home.join("profiles").join("web");
+        std::fs::create_dir_all(&profile).unwrap();
+        std::fs::create_dir_all(&runtime).unwrap();
+        std::fs::write(
+            profile.join("package.json"),
+            r#"{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dependencies": {
+    "@liustack/modlens": "3.21.1",
+    "dsh-better-sidebar": "0.13.1"
+  },
+  "dsh": { "profile": { "bundles": [
+    "@deepseek-ai/dsh-base",
+    "@deepseek-ai/dsh-web-app",
+    "@liustack/modlens",
+    "dsh-better-sidebar"
+  ] } }
+}
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            runtime.join(FACTORY_WEB_PLUGINS_REL),
+            r#"["dsh-better-sidebar"]"#,
+        )
+        .unwrap();
+
+        ensure_factory_web_plugin_bundles_in(&home, &runtime).unwrap();
+        let manifest = std::fs::read_to_string(profile.join("package.json")).unwrap();
+        assert_eq!(
+            bundles_of(&manifest),
+            vec![
+                "@deepseek-ai/dsh-base",
+                "@deepseek-ai/dsh-web-app",
+                "dsh-better-sidebar"
+            ]
+        );
+        let value: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+        assert!(value["dependencies"].get("@liustack/modlens").is_none());
+        assert_eq!(value["dependencies"]["dsh-better-sidebar"], "0.13.1");
+
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&runtime);
     }
