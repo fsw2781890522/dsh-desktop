@@ -1,6 +1,8 @@
 # Copies the just-built NSIS installer into releases/<version>/ and upserts
-# releases/latest.json. Never deletes another version's directory. Installer
-# binaries stay out of git; the index, notes, and SHA-256 sums are tracked.
+# the local releases/latest.json ledger. Never deletes another version's
+# directory. Installer binaries stay out of git; the ledger, notes, and
+# SHA-256 sums are tracked. Production discovery uses the personal GitHub
+# Release API after a matching Release is published.
 param(
     [string]$Version = "",
     [string]$NotesZh = "",

@@ -1,12 +1,13 @@
 # Changelog
 
-All notable desktop-shell releases are recorded here. The running app reads the same notes from `releases/latest.json`.
+All notable desktop-shell releases are recorded here. The running app shows notes from the personal GitHub Release.
 
 ## 0.3.2 — 2026-08-21
 
 - Rebases the bundled runtime on the official `@deepseek-ai/dsh@0.1.1-rc.1` baseline and overlays the locally built personal fork, including the session/process UI, prompt navigation, proxy fallback, and native attachment client changes.
 - The official baseline now provides native multimodal DeepSeek vision input, durable image attachments, and the attachment-gated `read_image` tool. The desktop therefore removes the ModLens plugin and keeps only `dsh-better-sidebar@0.13.1` as the factory web plugin.
 - The factory Anchored Standard discovery index points to native `read_image` for image inspection. User data remains in `~/.dsh`; product HTTP proxy fallback remains separate from agent web tools.
+- Update discovery now reads only the personal GitHub Releases API. A commit on `main` cannot advertise an installer before its matching Release exists; the Release asset's GitHub SHA-256 digest is verified before installation.
 
 ## 0.3.1 — 2026-08-19
 

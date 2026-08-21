@@ -4,61 +4,40 @@ English | [中文](update-channel.zh.md)
 
 The desktop construction repo owns how a running app discovers a newer installer. The Settings row in DeepSeek Harness only calls `window.__DSH_DESKTOP__.checkUpdate()` / `installUpdate()`; it does not fetch this document itself.
 
-## Channel index
+## Release source
 
-`releases/latest.json` is the document the app fetches. JSON Schema: [`../releases/channel.schema.json`](../releases/channel.schema.json).
+Production builds fetch only the latest non-draft, non-prerelease release from
+the personal repository's GitHub Releases API:
 
-```json
-{
-  "schemaVersion": 1,
-  "channel": "stable",
-  "latest": "0.2.1",
-  "releases": [
-    {
-      "version": "0.2.1",
-      "releasedAt": "2026-08-16T11:22:00Z",
-      "notes": { "zh": "…", "en": "…" },
-      "artifacts": {
-        "windows-x64": {
-          "kind": "nsis",
-          "filename": "DeepSeek Harness_0.2.1_x64-setup.exe",
-          "url": "https://example.invalid/DeepSeek-Harness_0.2.1_x64-setup.exe",
-          "sha256": "…",
-          "size": 123
-        }
-      }
-    }
-  ]
-}
-```
+`https://api.github.com/repos/fsw2781890522/dsh-desktop/releases/latest`
 
-Rules:
+The app uses the release `tag_name` (for example `v0.3.2`) as the version and
+selects the asset whose name ends in `_x64-setup.exe`. GitHub's `digest` field
+must contain a `sha256:` value; the installer is downloaded from that same
+release asset URL and verified against that digest. Release notes are shown in
+the Settings row.
 
-- `schemaVersion` is `1`. Other values are an explicit failure.
-- `latest` and each `version` are `major.minor.patch` with no pre-release suffix.
-- When the installed shell version is greater than or equal to `latest`, the app reports current and does not require artifacts.
-- When `latest` is newer, that release must include `artifacts.windows-x64` with a non-empty `url` and `sha256`. `kind` is `nsis` (implemented) or `runtime-zip` (reserved).
-- `url` may be `https:`, `http:`, or `file:`.
+`releases/latest.json` remains a tracked local release ledger and schema example
+for packaging/review; it is not read by production update checks. The `main`
+branch, a local file beside the executable, and environment overrides cannot
+advertise an update.
 
-## How the app finds the index
+## How the app finds the release
 
-1. Environment variable `DSH_DESKTOP_UPDATE_MANIFEST` (path or URL), when non-empty.
-2. `manifestUrl` in [`../src-tauri/update-channel.json`](../src-tauri/update-channel.json), when non-empty.
-3. `latest.json` next to the executable, then next to the Tauri resource dir.
-4. Debug builds only: `releases/latest.json` in this repository.
-
-An empty configuration is an error shown in Settings, not a silent skip.
+The fixed source is recorded in [`../src-tauri/update-channel.json`](../src-tauri/update-channel.json).
+If that personal Releases API URL is missing, the check fails visibly; there is
+no fallback to branch contents or local files.
 
 ## Proxy fallback
 
-Discovery and installer download use the same direct-then-proxy rule as `@deepseek-ai/dsh-http-proxy`. Direct connect is budgeted at five seconds (eight seconds overall); a transport failure retries through `http://127.0.0.1:{port}`. The port is `DSH_PROXY_PORT`, then the port in `DSH_PROXY_URL`, then `http-proxy.port` in `$DSH_HOME/settings.yaml` or `%USERPROFILE%\.dsh\settings.yaml`, then `7897`. Loopback and `file:` sources do not use the proxy. This is product HTTP: it does not register or enable `web_search` / `web_fetch` / `tool-web`.
+Release discovery and installer download use the same direct-then-proxy transport rule as `@deepseek-ai/dsh-http-proxy`. Direct connect is budgeted at five seconds (eight seconds overall); a transport failure retries through `http://127.0.0.1:{port}`. The port is `DSH_PROXY_PORT`, then the port in `DSH_PROXY_URL`, then `http-proxy.port` in `$DSH_HOME/settings.yaml` or `%USERPROFILE%\.dsh\settings.yaml`, then `7897`. The proxy changes transport only; it cannot change the GitHub Releases URL or response source. This is product HTTP: it does not register or enable `web_search` / `web_fetch` / `tool-web`.
 
 ## Publishing a version
 
-`scripts/build.ps1` runs `scripts/publish-release.ps1` after a successful NSIS build. That script copies the installer into `releases/<version>/`, writes `SHA256SUMS`, and upserts that version in `latest.json`. It never deletes another version's directory. Installer binaries stay out of git; `latest.json`, notes, and checksums are tracked.
+`scripts/build.ps1` runs `scripts/publish-release.ps1` after a successful NSIS build. That script copies the installer into `releases/<version>/`, writes `SHA256SUMS`, and upserts that version in `latest.json` for local review. A version is not discoverable until a matching non-draft GitHub Release exists in `fsw2781890522/dsh-desktop` with the installer asset uploaded. Installer binaries stay out of git; the personal GitHub Release is the production source of truth.
 
 Install uses NSIS `/S` with `/D=` set to the directory of the running exe (typically `%LOCALAPPDATA%\DeepSeek Harness`). User data stays in `~/.dsh`.
 
 ## Changelog
 
-Human-readable history: [`../CHANGELOG.md`](../CHANGELOG.md) / [`../CHANGELOG.zh.md`](../CHANGELOG.zh.md). The Settings row shows `notes` from the channel index for the newer version.
+Human-readable history: [`../CHANGELOG.md`](../CHANGELOG.md) / [`../CHANGELOG.zh.md`](../CHANGELOG.zh.md). The Settings row shows the body from the personal GitHub Release for the newer version.

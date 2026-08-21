@@ -36,8 +36,8 @@ together with a standalone `node.exe` and serves it inside a native window:
    system-trust roster entries, so a recipient's empty `~/.dsh` still sees
    Anchored Standard and uses it for new sessions.
 5. Settings → General includes **Check for updates** when the shell injected
-   `window.__DSH_DESKTOP__`. The discovery document, versioned installers, and
-   changelog live in this repo — see [docs/update-channel.md](docs/update-channel.md).
+   `window.__DSH_DESKTOP__`. Production update discovery uses the personal
+   GitHub Releases API as its sole source — see [docs/update-channel.md](docs/update-channel.md).
 6. Links with `target="_blank"` and `window.open` are opened in the system
    browser via a `dsh-ext://` scheme; the app is single-instance; closing the
    window stops the bundled server.
@@ -102,9 +102,9 @@ factory/                Factory agent presets and web-plugin pins overlaid at pa
 scripts/
   render-icon.mjs       Renders icon + splash pages from the official whale path
   bundle-runtime.ps1    Copies node.exe + @deepseek-ai/dsh, overlays factory presets and web plugins, packs zip
-  publish-release.ps1   Copies the NSIS installer into releases/<version>/ and updates latest.json
+  publish-release.ps1   Copies the NSIS installer into releases/<version>/ and updates the local ledger
 bundle-runtime/         Unpacked runtime used by `tauri dev` (not shipped by the installer)
 bundle-runtime.zip      Single-file runtime shipped as the Tauri resource
-releases/               Versioned channel index, notes, checksums (installer binaries gitignored)
+releases/               Local release ledger, notes, checksums (installer binaries gitignored)
 src-tauri/              The Tauri (Rust) shell
 ```

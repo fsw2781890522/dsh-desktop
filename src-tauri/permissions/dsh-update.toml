@@ -1,6 +1,6 @@
 [[permission]]
 identifier = "allow-dsh-check-update"
-description = "Allows fetching the desktop update channel index"
+description = "Allows fetching the personal GitHub Release update source"
 commands.allow = ["dsh_check_update"]
 
 [[permission]]
