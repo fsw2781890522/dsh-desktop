@@ -8,7 +8,7 @@
 - 官方已原生提供多模态视觉、持久化图片附件和受附件能力门控的 `read_image`，因此移除 ModLens。
 - 出厂 web 插件改为上游 `dsh-better-sidebar@0.15.0`（已支持 DSH 0.1.1-rc.1 / rc.2），不再自制 `dsh-client-web-react` 兼容桥。
 - 壳启动 `dsh web --no-open`，由 WebView 打开界面，不再拉起系统浏览器。
-- 用户数据仍在 `~/.dsh`。「检查更新」仍读 `releases/latest.json`。
+- 本地 overlay 会带上 `dsh-http-proxy` 所需的 `undici`。用户数据仍在 `~/.dsh`。「检查更新」仍读 `releases/latest.json`。
 
 ## 0.3.1 — 2026-08-19
 

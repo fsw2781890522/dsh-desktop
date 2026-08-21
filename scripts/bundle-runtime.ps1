@@ -36,6 +36,68 @@ function Copy-TreeContents {
     }
 }
 
+function Find-LocalNpmPackage {
+    param(
+        [Parameter(Mandatory = $true)][string]$HarnessRoot,
+        [Parameter(Mandatory = $true)][string]$PackageName
+    )
+    $hoisted = Join-Path $HarnessRoot ("node_modules\" + ($PackageName -replace '/', '\'))
+    if (Test-Path -LiteralPath (Join-Path $hoisted "package.json")) {
+        return $hoisted
+    }
+    $pnpmRoot = Join-Path $HarnessRoot "node_modules\.pnpm"
+    if (-not (Test-Path -LiteralPath $pnpmRoot)) {
+        return $null
+    }
+    $filter = if ($PackageName.StartsWith('@')) {
+        ($PackageName -replace '/', '+') + '@*'
+    } else {
+        "$PackageName@*"
+    }
+    foreach ($dir in @(Get-ChildItem -LiteralPath $pnpmRoot -Directory -Filter $filter -ErrorAction SilentlyContinue)) {
+        $inner = Join-Path $dir.FullName ("node_modules\" + ($PackageName -replace '/', '\'))
+        if (Test-Path -LiteralPath (Join-Path $inner "package.json")) {
+            return $inner
+        }
+    }
+    return $null
+}
+
+function Ensure-RuntimeNpmPackage {
+    param(
+        [Parameter(Mandatory = $true)][string]$HarnessRoot,
+        [Parameter(Mandatory = $true)][string]$PackageName
+    )
+    $dest = Join-Path $runtime ("node_modules\" + ($PackageName -replace '/', '\'))
+    if (Test-Path -LiteralPath (Join-Path $dest "package.json")) {
+        return
+    }
+    $source = Find-LocalNpmPackage $HarnessRoot $PackageName
+    if (-not $source) {
+        throw "local overlay is missing runtime package $PackageName"
+    }
+    Copy-TreeContents $source $dest
+    Write-Host "overlay runtime package: $PackageName"
+}
+
+function Copy-OverlayRuntimeDependencies {
+    param([Parameter(Mandatory = $true)][string]$HarnessRoot)
+
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    $httpProxy = Join-Path $runtime "node_modules\@deepseek-ai\dsh-http-proxy\package.json"
+    if (-not (Test-Path -LiteralPath $httpProxy)) {
+        return
+    }
+    $manifest = [System.IO.File]::ReadAllText($httpProxy, $utf8) | ConvertFrom-Json
+    if ($null -eq $manifest.dependencies) {
+        return
+    }
+    foreach ($dep in @($manifest.dependencies.PSObject.Properties.Name)) {
+        if ($dep.StartsWith('@deepseek-ai/')) { continue }
+        Ensure-RuntimeNpmPackage $HarnessRoot $dep
+    }
+}
+
 function Install-LocalHarnessOverlay {
     param([Parameter(Mandatory = $true)][string]$HarnessRoot)
 
@@ -90,6 +152,7 @@ function Install-LocalHarnessOverlay {
         Copy-Item -Force -LiteralPath $localBasePatch -Destination $runtimeBasePatch
     }
 
+    Copy-OverlayRuntimeDependencies $resolvedRoot
     Write-Host "local harness overlay: $packageCount package libraries + web frontend dist"
 }
 

@@ -8,7 +8,7 @@ All notable desktop-shell releases are recorded here. The running app shows note
 - Official DeepSeek now has native multimodal vision, durable image attachments, and attachment-gated `read_image`, so ModLens is removed.
 - Factory web plugin is upstream `dsh-better-sidebar@0.15.0`, which already supports DSH 0.1.1-rc.1 / rc.2. The desktop no longer ships a homemade `dsh-client-web-react` shim.
 - The shell starts `dsh web --no-open` so the system browser is not opened; the WebView owns the UI.
-- User data remains in `~/.dsh`. Check for updates still reads `releases/latest.json`.
+- The local overlay copies `undici` for `dsh-http-proxy`. User data remains in `~/.dsh`. Check for updates still reads `releases/latest.json`.
 
 ## 0.3.1 — 2026-08-19
 
