@@ -1,7 +1,7 @@
-//! Desktop update channel: fetch the personal GitHub Release, compare semver,
-//! verify its installer digest, and launch NSIS.
+//! Desktop update channel: fetch `latest.json`, compare semver, download and launch NSIS.
 
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -15,12 +15,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 const CHANNEL_CONFIG: &str = include_str!("../update-channel.json");
 const CURRENT: &str = env!("CARGO_PKG_VERSION");
-const PERSONAL_RELEASES_API: &str =
-    "https://api.github.com/repos/fsw2781890522/dsh-desktop/releases/latest";
+const WINDOWS_X64: &str = "windows-x64";
+const MANIFEST_ENV: &str = "DSH_DESKTOP_UPDATE_MANIFEST";
 const PROGRESS_EVENT: &str = "dsh-update-progress";
 
 static LAST_PLAN: Mutex<Option<InstallPlan>> = Mutex::new(None);
@@ -29,25 +29,29 @@ static IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ChannelConfig {
-    release_api_url: String,
+    manifest_url: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct GitHubReleaseDocument {
-    tag_name: String,
-    body: Option<String>,
-    assets: Vec<GitHubReleaseAsset>,
+#[serde(rename_all = "camelCase")]
+struct ChannelDocument {
+    schema_version: u32,
+    #[allow(dead_code)]
+    channel: String,
+    latest: String,
+    releases: Vec<Release>,
 }
 
 #[derive(Debug, Deserialize)]
-struct GitHubReleaseAsset {
-    name: String,
-    browser_download_url: String,
-    digest: Option<String>,
-    size: u64,
+#[serde(rename_all = "camelCase")]
+struct Release {
+    version: String,
+    notes: Notes,
+    #[serde(default)]
+    artifacts: BTreeMap<String, Artifact>,
 }
 
-/// Release notes shown in the update row.
+/// Bilingual installer notes from the channel index.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Notes {
     /// Simplified Chinese notes.
@@ -56,7 +60,16 @@ pub struct Notes {
     pub en: String,
 }
 
-/// Installer kind represented by a GitHub Release asset.
+#[derive(Debug, Clone, Deserialize)]
+struct Artifact {
+    kind: ArtifactKind,
+    filename: String,
+    url: String,
+    sha256: String,
+    size: u64,
+}
+
+/// Installer kind recorded on a channel artifact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ArtifactKind {
@@ -80,7 +93,7 @@ pub enum CheckResult {
         size: u64,
         kind: ArtifactKind,
     },
-    /// The personal GitHub Release cannot be used (bad JSON or missing artifact).
+    /// The channel cannot be used (missing URL, bad JSON, missing artifact).
     Unavailable { current: String, reason: String },
 }
 
@@ -100,7 +113,7 @@ struct Progress {
     total: Option<u64>,
 }
 
-/// Fetch the personal GitHub Release and compare it with this shell's semver.
+/// Fetch the channel index and compare it with this shell's semver.
 /// @returns `current`, `available`, or `unavailable`.
 #[tauri::command]
 pub async fn dsh_check_update(app: AppHandle) -> Result<CheckResult, String> {
@@ -168,9 +181,7 @@ fn install_blocking(app: &AppHandle) -> Result<(), String> {
         }
     };
     if plan.kind != ArtifactKind::Nsis {
-        return Err(
-            "this release is not an NSIS installer; runtime-zip install is not implemented".into(),
-        );
+        return Err("this release is not an NSIS installer; runtime-zip install is not implemented".into());
     }
     let filename = safe_filename(&plan.filename)?.to_string();
     let dest_dir = std::env::temp_dir().join("dsh-desktop-update");
@@ -184,58 +195,78 @@ fn install_blocking(app: &AppHandle) -> Result<(), String> {
         .ok_or_else(|| "cannot resolve the current install directory".to_string())?;
     let _ = app.emit(
         PROGRESS_EVENT,
-        Progress {
-            phase: "launch",
-            received: 0,
-            total: None,
-        },
+        Progress { phase: "launch", received: 0, total: None },
     );
     launch_nsis(&dest, &install_dir)
 }
 
 fn load_plan(app: &AppHandle) -> Result<(CheckResult, Option<InstallPlan>), String> {
-    let source = release_source(app)?;
+    let source = manifest_source(app)?;
     let text = read_text(&source)?;
-    evaluate_github_release(CURRENT, &text)
+    evaluate(CURRENT, &text)
 }
 
-fn configured_release_api_url() -> String {
+fn configured_manifest_url() -> String {
     serde_json::from_str::<ChannelConfig>(CHANNEL_CONFIG)
-        .map(|config| config.release_api_url)
+        .map(|config| config.manifest_url)
         .unwrap_or_default()
 }
 
-fn release_source(_app: &AppHandle) -> Result<String, String> {
-    resolve_release_source(&configured_release_api_url())
+fn manifest_source(app: &AppHandle) -> Result<String, String> {
+    let env_override = std::env::var(MANIFEST_ENV).ok();
+    let exe_dir = std::env::current_exe().ok().and_then(|exe| {
+        exe.parent().map(|dir| PathBuf::from(dir.to_string_lossy().as_ref()))
+    });
+    let debug_releases = if cfg!(debug_assertions) {
+        Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("releases"))
+    } else {
+        None
+    };
+    let resource_dir = app.path().resource_dir().ok();
+    resolve_manifest_source(
+        exe_dir.as_deref(),
+        resource_dir.as_deref(),
+        debug_releases.as_deref(),
+        env_override.as_deref(),
+        &configured_manifest_url(),
+    )
 }
 
-/// Return the sole configured GitHub Releases API source.
-fn resolve_release_source(configured_url: &str) -> Result<String, String> {
-    let configured_url = configured_url.trim();
-    if configured_url == PERSONAL_RELEASES_API {
-        return Ok(configured_url.to_string());
+/// Pick the channel index URL or path.
+fn resolve_manifest_source(
+    exe_dir: Option<&Path>,
+    resource_dir: Option<&Path>,
+    debug_releases_dir: Option<&Path>,
+    env_override: Option<&str>,
+    configured_url: &str,
+) -> Result<String, String> {
+    if let Some(value) = env_override.map(str::trim).filter(|s| !s.is_empty()) {
+        return Ok(value.to_string());
     }
-    if configured_url.is_empty() {
-        return Err("the personal GitHub Releases update source is not configured".into());
+    if !configured_url.trim().is_empty() {
+        return Ok(configured_url.trim().to_string());
     }
-    Err(format!(
-        "update source must be the personal GitHub Releases API: {PERSONAL_RELEASES_API}"
-    ))
+    for dir in [exe_dir, resource_dir, debug_releases_dir].into_iter().flatten() {
+        let candidate = dir.join("latest.json");
+        if candidate.is_file() {
+            return Ok(candidate.to_string_lossy().into_owned());
+        }
+    }
+    Err("the update channel is not configured (set DSH_DESKTOP_UPDATE_MANIFEST or ship latest.json next to the app)".into())
 }
 
-fn evaluate_github_release(
-    current: &str,
-    json: &str,
-) -> Result<(CheckResult, Option<InstallPlan>), String> {
+/// Compare `current` with a channel index document.
+fn evaluate(current: &str, json: &str) -> Result<(CheckResult, Option<InstallPlan>), String> {
     let current_semver = parse_semver(current)?;
-    let document: GitHubReleaseDocument = serde_json::from_str(json)
-        .map_err(|e| format!("GitHub Releases response is not valid JSON: {e}"))?;
-    let latest = document
-        .tag_name
-        .strip_prefix('v')
-        .unwrap_or(&document.tag_name);
-    let latest_semver = parse_semver(latest)
-        .map_err(|e| format!("GitHub Release tag {} is invalid: {e}", document.tag_name))?;
+    let document: ChannelDocument = serde_json::from_str(json)
+        .map_err(|e| format!("update manifest is not valid JSON: {e}"))?;
+    if document.schema_version != 1 {
+        return Err(format!(
+            "unsupported update schemaVersion {}",
+            document.schema_version
+        ));
+    }
+    let latest_semver = parse_semver(&document.latest)?;
     if current_semver >= latest_semver {
         return Ok((
             CheckResult::Current {
@@ -244,61 +275,37 @@ fn evaluate_github_release(
             None,
         ));
     }
-
-    let asset = document
-        .assets
+    let release = document
+        .releases
         .iter()
-        .find(|asset| asset.name.ends_with("_x64-setup.exe"))
-        .ok_or_else(|| {
-            format!(
-                "GitHub Release {} has no x64 NSIS installer",
-                document.tag_name
-            )
-        })?;
-    validate_release_asset_url(&document.tag_name, &asset.browser_download_url)?;
-    let digest = normalize_sha256_digest(asset.digest.as_deref(), &asset.name)?;
-    safe_filename(&asset.name)?;
-    let notes = document.body.unwrap_or_default();
+        .find(|entry| entry.version == document.latest)
+        .ok_or_else(|| format!("latest version {} is missing from releases", document.latest))?;
+    let artifact = release.artifacts.get(WINDOWS_X64).ok_or_else(|| {
+        format!("release {} has no {WINDOWS_X64} artifact", document.latest)
+    })?;
+    if artifact.url.trim().is_empty() || artifact.sha256.trim().is_empty() {
+        return Err(format!(
+            "release {} is missing url or sha256",
+            document.latest
+        ));
+    }
+    safe_filename(&artifact.filename)?;
     let plan = InstallPlan {
-        kind: ArtifactKind::Nsis,
-        filename: asset.name.clone(),
-        url: asset.browser_download_url.clone(),
-        sha256: digest,
+        kind: artifact.kind,
+        filename: artifact.filename.clone(),
+        url: artifact.url.clone(),
+        sha256: artifact.sha256.trim().to_ascii_lowercase(),
     };
     Ok((
         CheckResult::Available {
             current: current.to_string(),
-            latest: latest.to_string(),
-            notes: Notes {
-                zh: notes.clone(),
-                en: notes,
-            },
-            size: asset.size,
-            kind: ArtifactKind::Nsis,
+            latest: document.latest.clone(),
+            notes: release.notes.clone(),
+            size: artifact.size,
+            kind: artifact.kind,
         },
         Some(plan),
     ))
-}
-
-fn validate_release_asset_url(tag: &str, url: &str) -> Result<(), String> {
-    let expected_prefix =
-        format!("https://github.com/fsw2781890522/dsh-desktop/releases/download/{tag}/");
-    if url.starts_with(&expected_prefix) {
-        Ok(())
-    } else {
-        Err(format!(
-            "GitHub Release asset URL is outside the personal repository: {url}"
-        ))
-    }
-}
-
-fn normalize_sha256_digest(value: Option<&str>, asset_name: &str) -> Result<String, String> {
-    let digest = value
-        .and_then(|value| value.strip_prefix("sha256:"))
-        .map(str::trim)
-        .filter(|value| value.len() == 64 && value.chars().all(|ch| ch.is_ascii_hexdigit()))
-        .ok_or_else(|| format!("GitHub Release asset {asset_name} has no valid SHA-256 digest"))?;
-    Ok(digest.to_ascii_lowercase())
 }
 
 /// Parse `major.minor.patch` with no pre-release suffix.
@@ -319,8 +326,7 @@ fn parse_part(part: Option<&str>, original: &str) -> Result<u64, String> {
     if part.is_empty() || !part.chars().all(|c| c.is_ascii_digit()) {
         return Err(format!("unsupported version {original}"));
     }
-    part.parse()
-        .map_err(|_| format!("unsupported version {original}"))
+    part.parse().map_err(|_| format!("unsupported version {original}"))
 }
 
 /// Map a `file:` URL or local path to a filesystem path; HTTP(S) returns `None`.
@@ -342,7 +348,7 @@ fn local_path(source: &str) -> Option<PathBuf> {
 
 fn read_text(source: &str) -> Result<String, String> {
     String::from_utf8(read_bytes(source)?)
-        .map_err(|e| format!("GitHub Releases response is not UTF-8: {e}"))
+        .map_err(|e| format!("update manifest is not UTF-8: {e}"))
 }
 
 fn read_bytes(source: &str) -> Result<Vec<u8>, String> {
@@ -498,12 +504,7 @@ fn http_call(url: &str, proxy_timeout: Duration) -> Result<ureq::Response, Strin
         .timeout_connect(Duration::from_secs(5))
         .timeout(Duration::from_secs(8))
         .build();
-    match direct
-        .get(url)
-        .set("Accept", "application/vnd.github+json")
-        .set("User-Agent", "dsh-desktop")
-        .call()
-    {
+    match direct.get(url).call() {
         Ok(response) => Ok(response),
         Err(direct_err) => {
             if is_loopback_http_url(url) {
@@ -517,16 +518,11 @@ fn http_call(url: &str, proxy_timeout: Duration) -> Result<ureq::Response, Strin
                 .timeout_connect(Duration::from_secs(10))
                 .timeout(proxy_timeout)
                 .build();
-            agent
-                .get(url)
-                .set("Accept", "application/vnd.github+json")
-                .set("User-Agent", "dsh-desktop")
-                .call()
-                .map_err(|proxy_err| {
+            agent.get(url).call().map_err(|proxy_err| {
                 format!(
                     "failed to fetch {url}: {direct_err}; proxy http://127.0.0.1:{port} also failed: {proxy_err}"
                 )
-                })
+            })
         }
     }
 }
@@ -549,15 +545,11 @@ fn download_verified(
 ) -> Result<(), String> {
     let _ = app.emit(
         PROGRESS_EVENT,
-        Progress {
-            phase: "download",
-            received: 0,
-            total: None,
-        },
+        Progress { phase: "download", received: 0, total: None },
     );
     if let Some(path) = local_path(source) {
-        let bytes =
-            std::fs::read(&path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+        let bytes = std::fs::read(&path)
+            .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
         let _ = app.emit(
             PROGRESS_EVENT,
             Progress {
@@ -574,8 +566,7 @@ fn download_verified(
         .header("Content-Length")
         .and_then(|value| value.parse::<u64>().ok());
     let mut reader = response.into_reader();
-    let mut file =
-        File::create(dest).map_err(|e| format!("failed to create {}: {e}", dest.display()))?;
+    let mut file = File::create(dest).map_err(|e| format!("failed to create {}: {e}", dest.display()))?;
     let mut hasher = Sha256::new();
     let mut buf = [0_u8; 65_536];
     let mut received = 0_u64;
@@ -592,28 +583,18 @@ fn download_verified(
         received += n as u64;
         let _ = app.emit(
             PROGRESS_EVENT,
-            Progress {
-                phase: "download",
-                received,
-                total,
-            },
+            Progress { phase: "download", received, total },
         );
     }
     drop(file);
     let actual = hex_encode(&hasher.finalize());
     if actual != expected_sha256.to_ascii_lowercase() {
         let _ = std::fs::remove_file(dest);
-        return Err(
-            "downloaded installer SHA-256 does not match the published GitHub Release".into(),
-        );
+        return Err("downloaded installer SHA-256 does not match the channel index".into());
     }
     let _ = app.emit(
         PROGRESS_EVENT,
-        Progress {
-            phase: "verify",
-            received,
-            total: Some(received),
-        },
+        Progress { phase: "verify", received, total: Some(received) },
     );
     Ok(())
 }
@@ -626,9 +607,7 @@ fn verify_and_write(
 ) -> Result<(), String> {
     let actual = sha256_hex(bytes);
     if actual != expected_sha256.to_ascii_lowercase() {
-        return Err(
-            "downloaded installer SHA-256 does not match the published GitHub Release".into(),
-        );
+        return Err("downloaded installer SHA-256 does not match the channel index".into());
     }
     let _ = app.emit(
         PROGRESS_EVENT,
@@ -678,20 +657,25 @@ fn launch_nsis(installer: &Path, install_dir: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    fn github_release_json(tag: &str, asset_name: &str, url: &str, digest: Option<&str>) -> String {
-        let digest = digest
-            .map(|value| format!(r#""{value}""#))
-            .unwrap_or_else(|| "null".to_string());
+    fn available_json(latest: &str, url: &str, sha: &str) -> String {
         format!(
             r#"{{
-              "tag_name": "{tag}",
-              "name": "DeepSeek Harness {tag}",
-              "body": "中文说明\\n\\nEnglish notes",
-              "assets": [{{
-                "name": "{asset_name}",
-                "browser_download_url": "{url}",
-                "size": 123,
-                "digest": {digest}
+              "schemaVersion": 1,
+              "channel": "stable",
+              "latest": "{latest}",
+              "releases": [{{
+                "version": "{latest}",
+                "releasedAt": "2026-08-16T00:00:00Z",
+                "notes": {{ "zh": "中文", "en": "English" }},
+                "artifacts": {{
+                  "windows-x64": {{
+                    "kind": "nsis",
+                    "filename": "DeepSeek-Harness_{latest}_x64-setup.exe",
+                    "url": "{url}",
+                    "sha256": "{sha}",
+                    "size": 12
+                  }}
+                }}
               }}]
             }}"#
         )
@@ -708,73 +692,64 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_github_release_reports_current_for_latest_published_release() {
-        let json = github_release_json(
-            "v0.3.1",
-            "DeepSeek.Harness_0.3.1_x64-setup.exe",
-            "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.1/DeepSeek.Harness_0.3.1_x64-setup.exe",
-            Some("sha256:4ba04a152c53b6d72bf92a997f6e94467437872004a62db22812858fbf709070"),
-        );
-        let (result, plan) = evaluate_github_release("0.3.1", &json).unwrap();
+    fn evaluate_current_when_latest_matches_or_is_older() {
+        let json = r#"{
+          "schemaVersion": 1,
+          "channel": "stable",
+          "latest": "0.2.0",
+          "releases": [{ "version": "0.2.0", "notes": { "zh": "", "en": "" } }]
+        }"#;
+        let (result, plan) = evaluate("0.2.0", json).unwrap();
+        assert!(matches!(result, CheckResult::Current { .. }));
+        assert!(plan.is_none());
+        let (result, plan) = evaluate("0.3.0", json).unwrap();
         assert!(matches!(result, CheckResult::Current { .. }));
         assert!(plan.is_none());
     }
 
     #[test]
-    fn evaluate_github_release_uses_only_published_release_asset() {
-        let json = github_release_json(
-            "v0.3.2",
-            "DeepSeek.Harness_0.3.2_x64-setup.exe",
-            "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.2/DeepSeek.Harness_0.3.2_x64-setup.exe",
-            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-        );
-        let (result, plan) = evaluate_github_release("0.3.1", &json).unwrap();
+    fn evaluate_available_when_latest_is_newer() {
+        let json = available_json("0.2.1", "file:///C:/setup.exe", "abcd");
+        let (result, plan) = evaluate("0.2.0", &json).unwrap();
         match result {
-            CheckResult::Available {
-                latest,
-                size,
-                notes,
-                ..
-            } => {
-                assert_eq!(latest, "0.3.2");
-                assert_eq!(size, 123);
-                assert_eq!(notes.zh, "中文说明\\n\\nEnglish notes");
+            CheckResult::Available { latest, size, kind, notes, .. } => {
+                assert_eq!(latest, "0.2.1");
+                assert_eq!(size, 12);
+                assert_eq!(kind, ArtifactKind::Nsis);
+                assert_eq!(notes.zh, "中文");
             }
             other => panic!("expected available, got {other:?}"),
         }
-        let plan = plan.unwrap();
-        assert_eq!(plan.url, "https://github.com/fsw2781890522/dsh-desktop/releases/download/v0.3.2/DeepSeek.Harness_0.3.2_x64-setup.exe");
-        assert_eq!(
-            plan.sha256,
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        );
+        assert_eq!(plan.unwrap().filename, "DeepSeek-Harness_0.2.1_x64-setup.exe");
     }
 
     #[test]
-    fn evaluate_github_release_rejects_missing_sha256_or_installer_asset() {
-        let missing_digest = github_release_json(
-            "v0.3.2",
-            "DeepSeek.Harness_0.3.2_x64-setup.exe",
-            "https://example.invalid/setup.exe",
-            None,
-        );
-        assert!(evaluate_github_release("0.3.1", &missing_digest).is_err());
+    fn evaluate_rejects_bad_schema_missing_artifact_and_bad_filename() {
+        assert!(evaluate("0.2.0", r#"{"schemaVersion":2,"channel":"stable","latest":"0.2.1","releases":[]}"#).is_err());
+        let missing = r#"{
+          "schemaVersion": 1,
+          "channel": "stable",
+          "latest": "0.2.1",
+          "releases": [{ "version": "0.2.1", "notes": { "zh": "", "en": "" } }]
+        }"#;
+        assert!(evaluate("0.2.0", missing).is_err());
+        let empty_url = available_json("0.2.1", "", "abcd");
+        assert!(evaluate("0.2.0", &empty_url).is_err());
+        let slash = available_json("0.2.1", "file:///C:/setup.exe", "abcd")
+            .replace("DeepSeek-Harness_0.2.1_x64-setup.exe", "../evil.exe");
+        assert!(evaluate("0.2.0", &slash).is_err());
+    }
 
-        let missing_installer = github_release_json(
-            "v0.3.2",
-            "SHA256SUMS",
-            "https://example.invalid/SHA256SUMS",
-            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-        );
-        assert!(evaluate_github_release("0.3.1", &missing_installer).is_err());
-
-        let external_asset = github_release_json(
-            "v0.3.2",
-            "DeepSeek.Harness_0.3.2_x64-setup.exe",
-            "https://example.invalid/DeepSeek.Harness_0.3.2_x64-setup.exe",
-            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-        );
-        assert!(evaluate_github_release("0.3.1", &external_asset).is_err());
+    #[test]
+    fn evaluate_accepts_reserved_runtime_zip_kind() {
+        let json = available_json("0.2.1", "file:///C:/runtime.zip", "abcd")
+            .replace("\"kind\": \"nsis\"", "\"kind\": \"runtime-zip\"");
+        let (result, plan) = evaluate("0.2.0", &json).unwrap();
+        match result {
+            CheckResult::Available { kind, .. } => assert_eq!(kind, ArtifactKind::RuntimeZip),
+            other => panic!("expected available, got {other:?}"),
+        }
+        assert_eq!(plan.unwrap().kind, ArtifactKind::RuntimeZip);
     }
 
     #[test]
@@ -786,21 +761,25 @@ mod tests {
     }
 
     #[test]
-    fn resolve_release_source_uses_configured_personal_release_only() {
+    fn resolve_manifest_source_prefers_env_then_config_then_files() {
+        let tmp = std::env::temp_dir().join("dsh-desktop-update-test");
+        std::fs::create_dir_all(&tmp).unwrap();
+        let beside = tmp.join("latest.json");
+        std::fs::write(&beside, "{}").unwrap();
         assert_eq!(
-            resolve_release_source(PERSONAL_RELEASES_API).unwrap(),
-            PERSONAL_RELEASES_API
+            resolve_manifest_source(Some(&tmp), None, None, Some("C:/override.json"), "").unwrap(),
+            "C:/override.json"
         );
-        assert!(resolve_release_source("").is_err());
-        assert!(resolve_release_source(
-            "https://raw.githubusercontent.com/fsw2781890522/dsh-desktop/main/releases/latest.json"
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn embedded_release_source_is_the_personal_api() {
-        assert_eq!(configured_release_api_url(), PERSONAL_RELEASES_API);
+        assert_eq!(
+            resolve_manifest_source(Some(&tmp), None, None, None, "https://example.com/latest.json").unwrap(),
+            "https://example.com/latest.json"
+        );
+        assert_eq!(
+            resolve_manifest_source(Some(&tmp), None, None, None, "").unwrap(),
+            beside.to_string_lossy()
+        );
+        std::fs::remove_file(&beside).unwrap();
+        assert!(resolve_manifest_source(Some(&tmp), None, None, None, "").is_err());
     }
 
     #[test]
@@ -814,43 +793,25 @@ mod tests {
     #[test]
     fn resolve_proxy_port_prefers_env_then_url_then_yaml_then_default() {
         assert_eq!(
-            resolve_proxy_port(
-                Some("8888"),
-                Some("http://127.0.0.1:1"),
-                Some("http-proxy:\n  port: 2\n")
-            ),
+            resolve_proxy_port(Some("8888"), Some("http://127.0.0.1:1"), Some("http-proxy:\n  port: 2\n")),
             8888
         );
         assert_eq!(
-            resolve_proxy_port(
-                None,
-                Some("http://127.0.0.1:9050"),
-                Some("http-proxy:\n  port: 2\n")
-            ),
+            resolve_proxy_port(None, Some("http://127.0.0.1:9050"), Some("http-proxy:\n  port: 2\n")),
             9050
         );
         assert_eq!(
-            resolve_proxy_port(
-                None,
-                None,
-                Some("ui-theme:\n  preference: dark\nhttp-proxy:\n  port: 8118 # clash\n")
-            ),
+            resolve_proxy_port(None, None, Some("ui-theme:\n  preference: dark\nhttp-proxy:\n  port: 8118 # clash\n")),
             8118
         );
         assert_eq!(
             resolve_proxy_port(None, None, Some("http-proxy: { port: 1234 }\n")),
             1234
         );
-        assert_eq!(
-            resolve_proxy_port(Some("nope"), None, None),
-            DEFAULT_PROXY_PORT
-        );
+        assert_eq!(resolve_proxy_port(Some("nope"), None, None), DEFAULT_PROXY_PORT);
         assert_eq!(resolve_proxy_port(None, None, None), DEFAULT_PROXY_PORT);
         assert_eq!(parse_proxy_url_port("http://[::1]:7897/"), Some(7897));
-        assert_eq!(
-            parse_http_proxy_port_yaml("http-proxy:\n  port: \"9050\"\n"),
-            Some(9050)
-        );
+        assert_eq!(parse_http_proxy_port_yaml("http-proxy:\n  port: \"9050\"\n"), Some(9050));
     }
 
     #[test]

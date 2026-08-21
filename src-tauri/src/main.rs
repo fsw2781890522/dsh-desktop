@@ -117,21 +117,6 @@ const DSH_BIN_REL: &str = "node_modules/@deepseek-ai/dsh/lib/bin.js";
 const COMMANDER_NESTED_REL: &str =
     "node_modules/@deepseek-ai/dsh/node_modules/commander/package.json";
 const COMMANDER_HOISTED_REL: &str = "node_modules/commander/package.json";
-/// The web overlay is a local build of the 0.1.1-rc.1 baseline. These
-/// manifests are the minimum dependency surface needed to reject the mixed
-/// npm/local tree that otherwise reaches startup and fails with
-/// `ERR_MODULE_NOT_FOUND` from the user's profile.
-const WEB_APP_MANIFEST_REL: &str = "node_modules/@deepseek-ai/dsh-web-app/package.json";
-const UI_REFERENCE_MANIFEST_REL: &str =
-    "node_modules/@deepseek-ai/dsh-client-ui-reference/package.json";
-const OPEN_MANIFEST_REL: &str = "node_modules/open/package.json";
-/// The personal 0.3.1 profile can still contain browser plugins compiled
-/// against the retired rc.7 web-react package. 0.3.2 ships a desktop-owned
-/// browser compatibility bundle for that existing user data.
-const WEB_REACT_COMPAT_MANIFEST_REL: &str =
-    "node_modules/@deepseek-ai/dsh-client-web-react/package.json";
-const WEB_REACT_COMPAT_CLIENT_REL: &str =
-    "node_modules/@deepseek-ai/dsh-client-web-react/lib/client.js";
 
 /// Tauri's `resource_dir()` returns `\\?\`-prefixed verbatim paths on
 /// Windows; child processes (node, tar) reject those.
@@ -159,23 +144,8 @@ fn commander_present(root: &Path) -> bool {
     root.join(COMMANDER_NESTED_REL).is_file() || root.join(COMMANDER_HOISTED_REL).is_file()
 }
 
-fn web_runtime_dependency_closure_present(root: &Path) -> bool {
-    [
-        WEB_APP_MANIFEST_REL,
-        UI_REFERENCE_MANIFEST_REL,
-        OPEN_MANIFEST_REL,
-        WEB_REACT_COMPAT_MANIFEST_REL,
-        WEB_REACT_COMPAT_CLIENT_REL,
-    ]
-    .iter()
-    .all(|relative| root.join(relative).is_file())
-}
-
 fn runtime_complete(root: &Path) -> bool {
-    root.join("node.exe").is_file()
-        && root.join(DSH_BIN_REL).is_file()
-        && commander_present(root)
-        && web_runtime_dependency_closure_present(root)
+    root.join("node.exe").is_file() && root.join(DSH_BIN_REL).is_file() && commander_present(root)
 }
 
 fn zip_stamp(zip: &Path) -> String {
@@ -564,7 +534,13 @@ fn port_of_readiness_line(line: &str) -> Option<u16> {
     digits.parse().ok()
 }
 
-/// Spawn `node <dsh>/lib/bin.js web --host 127.0.0.1 --port 0` and watch its
+/// The desktop owns the WebView, so the CLI must not hand the local URL to the
+/// system browser during startup.
+fn web_server_args() -> [&'static str; 6] {
+    ["web", "--host", "127.0.0.1", "--port", "0", "--no-open"]
+}
+
+/// Spawn `node <dsh>/lib/bin.js` with the desktop-owned web arguments and watch
 /// stdout for the readiness line carrying the real bound port.
 ///
 /// `CREATE_NO_WINDOW` gives the console-subsystem node process a hidden
@@ -584,7 +560,7 @@ fn spawn_server(node: &Path, bin: &Path) -> Result<(Child, Receiver<Result<u16, 
     }
     let mut child = command
         .arg(bin)
-        .args(["web", "--host", "127.0.0.1", "--port", "0"])
+        .args(web_server_args())
         .current_dir(workdir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -953,6 +929,14 @@ mod tests {
         assert_eq!(effects.effects, vec![Effect::Acrylic]);
     }
 
+    #[test]
+    fn web_server_args_disable_default_browser_handoff() {
+        assert_eq!(
+            web_server_args(),
+            ["web", "--host", "127.0.0.1", "--port", "0", "--no-open"]
+        );
+    }
+
     fn unique_temp(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
             "dsh-desktop-{name}-{}-{}",
@@ -965,32 +949,6 @@ mod tests {
     }
 
     fn write_runtime_tree(root: &Path, node_contents: &[u8]) {
-        std::fs::create_dir_all(root.join("node_modules/@deepseek-ai/dsh/lib")).unwrap();
-        std::fs::create_dir_all(root.join("node_modules/@deepseek-ai/dsh/node_modules/commander"))
-            .unwrap();
-        std::fs::write(root.join("node.exe"), node_contents).unwrap();
-        std::fs::write(root.join(DSH_BIN_REL), b"bin").unwrap();
-        std::fs::write(root.join(COMMANDER_NESTED_REL), b"{}").unwrap();
-        for relative in [
-            WEB_APP_MANIFEST_REL,
-            UI_REFERENCE_MANIFEST_REL,
-            OPEN_MANIFEST_REL,
-            WEB_REACT_COMPAT_MANIFEST_REL,
-            WEB_REACT_COMPAT_CLIENT_REL,
-        ] {
-            let path = root.join(relative);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, b"{}").unwrap();
-        }
-    }
-
-    fn write_runtime_tree_without_web_react_compat(root: &Path, node_contents: &[u8]) {
-        write_runtime_tree(root, node_contents);
-        std::fs::remove_file(root.join(WEB_REACT_COMPAT_MANIFEST_REL)).unwrap();
-        std::fs::remove_file(root.join(WEB_REACT_COMPAT_CLIENT_REL)).unwrap();
-    }
-
-    fn write_runtime_tree_without_web_closure(root: &Path, node_contents: &[u8]) {
         std::fs::create_dir_all(root.join("node_modules/@deepseek-ai/dsh/lib")).unwrap();
         std::fs::create_dir_all(root.join("node_modules/@deepseek-ai/dsh/node_modules/commander"))
             .unwrap();
@@ -1048,65 +1006,12 @@ mod tests {
         std::fs::write(hoisted.join("node.exe"), b"node").unwrap();
         std::fs::write(hoisted.join(DSH_BIN_REL), b"bin").unwrap();
         std::fs::write(hoisted.join(COMMANDER_HOISTED_REL), b"{}").unwrap();
-        for relative in [
-            WEB_APP_MANIFEST_REL,
-            UI_REFERENCE_MANIFEST_REL,
-            OPEN_MANIFEST_REL,
-            WEB_REACT_COMPAT_MANIFEST_REL,
-            WEB_REACT_COMPAT_CLIENT_REL,
-        ] {
-            let path = hoisted.join(relative);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, b"{}").unwrap();
-        }
         assert!(runtime_complete(&hoisted));
         std::fs::remove_file(hoisted.join(COMMANDER_HOISTED_REL)).unwrap();
         assert!(!runtime_complete(&hoisted));
 
         let _ = std::fs::remove_dir_all(&nested);
         let _ = std::fs::remove_dir_all(&hoisted);
-    }
-
-    #[test]
-    fn runtime_complete_rejects_missing_web_runtime_dependency_closure() {
-        let root = unique_temp("complete-web-closure");
-        write_runtime_tree_without_web_closure(&root, b"node");
-        assert!(!runtime_complete(&root));
-
-        for relative in [
-            "node_modules/@deepseek-ai/dsh-web-app/package.json",
-            "node_modules/@deepseek-ai/dsh-client-ui-reference/package.json",
-            "node_modules/open/package.json",
-            WEB_REACT_COMPAT_MANIFEST_REL,
-            WEB_REACT_COMPAT_CLIENT_REL,
-        ] {
-            let path = root.join(relative);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, b"{}").unwrap();
-        }
-        assert!(runtime_complete(&root));
-
-        std::fs::remove_file(root.join("node_modules/open/package.json")).unwrap();
-        assert!(!runtime_complete(&root));
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn runtime_complete_requires_the_legacy_web_react_compat_bundle() {
-        let root = unique_temp("complete-web-react-compat");
-        write_runtime_tree_without_web_react_compat(&root, b"node");
-        assert!(!runtime_complete(&root));
-
-        for relative in [WEB_REACT_COMPAT_MANIFEST_REL, WEB_REACT_COMPAT_CLIENT_REL] {
-            let path = root.join(relative);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, b"{}").unwrap();
-        }
-        assert!(runtime_complete(&root));
-
-        std::fs::remove_file(root.join(WEB_REACT_COMPAT_CLIENT_REL)).unwrap();
-        assert!(!runtime_complete(&root));
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

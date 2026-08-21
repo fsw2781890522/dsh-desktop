@@ -2,14 +2,13 @@
 
 All notable desktop-shell releases are recorded here. The running app shows notes from the personal GitHub Release.
 
-## 0.3.2 — 2026-08-21
+## 0.3.2 — 2026-08-22
 
-- Rebases the bundled runtime on the official `@deepseek-ai/dsh@0.1.1-rc.1` baseline and overlays the locally built personal fork, including the session/process UI, prompt navigation, proxy fallback, and native attachment client changes.
-- The official baseline now provides native multimodal DeepSeek vision input, durable image attachments, and the attachment-gated `read_image` tool. The desktop therefore removes the ModLens plugin and keeps only `dsh-better-sidebar@0.13.1` as the factory web plugin.
-- 0.3.1-era personal profile plugins that still import the retired `@deepseek-ai/dsh-client-web-react` module are kept compatible by a desktop-owned bridge and an explicit runtime completeness check; the official rc.1 source is unchanged.
-- The desktop build now requires the official client build profile, preserving the upstream DeepSeek Harness wordmark and rejecting `DSH Local Build` artifacts before packaging.
-- The factory Anchored Standard discovery index points to native `read_image` for image inspection. User data remains in `~/.dsh`; product HTTP proxy fallback remains separate from agent web tools.
-- Update discovery now reads only the personal GitHub Releases API. A commit on `main` cannot advertise an installer before its matching Release exists; the Release asset's GitHub SHA-256 digest is verified before installation.
+- Rebases the bundled runtime on official `@deepseek-ai/dsh@0.1.1-rc.2` and overlays the personal fork (session/process UI, prompt navigation, proxy fallback).
+- Official DeepSeek now has native multimodal vision, durable image attachments, and attachment-gated `read_image`, so ModLens is removed.
+- Factory web plugin is upstream `dsh-better-sidebar@0.15.0`, which already supports DSH 0.1.1-rc.1 / rc.2. The desktop no longer ships a homemade `dsh-client-web-react` shim.
+- The shell starts `dsh web --no-open` so the system browser is not opened; the WebView owns the UI.
+- User data remains in `~/.dsh`. Check for updates still reads `releases/latest.json`.
 
 ## 0.3.1 — 2026-08-19
 

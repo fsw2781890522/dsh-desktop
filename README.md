@@ -21,7 +21,7 @@ together with a standalone `node.exe` and serves it inside a native window:
    `commander`. On launch the shell appends those plugin names to the web
    profile bundle list when they are missing; it does not edit `cordis.patch.yml`.
 2. On launch the app unpacks the zip if needed, then spawns
-   `node.exe node_modules/@deepseek-ai/dsh/lib/bin.js web --host 127.0.0.1 --port 0`
+   `node.exe node_modules/@deepseek-ai/dsh/lib/bin.js web --host 127.0.0.1 --port 0 --no-open`
    and parses the readiness line (`dsh web: http://127.0.0.1:PORT`) from stdout.
 3. A WebView2 window opens at `http://127.0.0.1:PORT/` — the untouched official UI.
    The window is frameless. Injected chrome places minimize / maximize / close
@@ -36,8 +36,8 @@ together with a standalone `node.exe` and serves it inside a native window:
    system-trust roster entries, so a recipient's empty `~/.dsh` still sees
    Anchored Standard and uses it for new sessions.
 5. Settings → General includes **Check for updates** when the shell injected
-   `window.__DSH_DESKTOP__`. Production update discovery uses the personal
-   GitHub Releases API as its sole source — see [docs/update-channel.md](docs/update-channel.md).
+   `window.__DSH_DESKTOP__`. The row fetches `releases/latest.json` from the
+   personal GitHub repo — see [docs/update-channel.md](docs/update-channel.md).
 6. Links with `target="_blank"` and `window.open` are opened in the system
    browser via a `dsh-ext://` scheme; the app is single-instance; closing the
    window stops the bundled server.
@@ -63,13 +63,8 @@ black-background logo style.
 ## Build
 
 ```powershell
-# 1. (Re)bundle the dsh runtime — install the official 0.1.1-rc.1 baseline,
-#    overlay the locally built fork, then pack bundle-runtime.zip
-Push-Location ..\deepseek-harness
-pnpm run build:official
-Pop-Location
-.\scripts\bundle-runtime.ps1 -DshVersion "0.1.1-rc.1" `
-  -LocalHarnessRoot "..\deepseek-harness"
+# 1. Bundle official @deepseek-ai/dsh@0.1.1-rc.2, overlay the local fork, pack zip
+.\scripts\bundle-runtime.ps1 -LocalHarnessRoot "..\deepseek-harness"
 
 # 2. Install JS tooling (Tauri CLI + icon renderer)
 npm install
@@ -80,8 +75,7 @@ npm run icon
 
 # 4. Build the app + NSIS installer (output: src-tauri/target/release/bundle/
 #    and a versioned copy under releases/<version>/)
-.\scripts\build.ps1 -DshVersion "0.1.1-rc.1" `
-  -LocalHarnessRoot "..\deepseek-harness"
+.\scripts\build.ps1 -LocalHarnessRoot "..\deepseek-harness"
 
 # Development run (spawns the server, opens the window, no installer)
 npm run dev
@@ -90,14 +84,11 @@ npm run dev
 ## Updating the bundled DeepSeek Harness version
 
 The runtime under `bundle-runtime/node_modules/@deepseek-ai/dsh` starts from a
-published npm installation. For a personal fork build, pass the local
-`deepseek-harness` checkout with `-LocalHarnessRoot`; the bundler overlays its
-built host/client libraries, web frontend `dist/`, CLI config, and web patch
-onto the official baseline. The official `0.1.1-rc.1` baseline includes native
-multimodal input and `read_image`, so this desktop no longer bundles ModLens.
-Run `pnpm run build:official` in that checkout first. The desktop bundler
-rejects incomplete or non-official client build records so a local-build label
-cannot replace the upstream DeepSeek Harness wordmark in a release installer.
+published npm installation of `@deepseek-ai/dsh@0.1.1-rc.2`. Pass a local
+`deepseek-harness` checkout with `-LocalHarnessRoot` to overlay built fork
+packages. Official rc.2 already includes native multimodal input and
+`read_image`, so this desktop does not bundle ModLens. The factory web plugin
+is upstream `dsh-better-sidebar@0.15.0`.
 
 ## Layout
 

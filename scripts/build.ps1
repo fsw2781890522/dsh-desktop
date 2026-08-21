@@ -3,7 +3,7 @@
 # BuildTools layout exists, otherwise relies on ambient toolchain discovery.
 param(
     [switch]$Debug,
-    [string]$DshVersion = "0.1.1-rc.1",
+    [string]$DshVersion = "0.1.1-rc.2",
     [string]$LocalHarnessRoot = ""
 )
 $ErrorActionPreference = "Stop"

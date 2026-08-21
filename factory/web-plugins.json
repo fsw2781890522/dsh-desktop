@@ -1,5 +1,5 @@
 {
   "packages": [
-    { "name": "dsh-better-sidebar", "spec": "0.13.1" }
+    { "name": "dsh-better-sidebar", "spec": "0.15.0" }
   ]
 }

@@ -22,8 +22,8 @@ and other shared libraries stay on the harness versions). The pack step also wri
 launch the shell appends any missing names to `~/.dsh/profiles/web` `dsh.profile.bundles`
 so a fresh install loads the plugins; it never rewrites the user `cordis.patch.yml`.
 
-Current pin: `dsh-better-sidebar@0.13.1`. The official dsh `0.1.1-rc.1` baseline
-provides native multimodal DeepSeek input and the attachment-gated `read_image`
-tool, so the former ModLens plugin is intentionally not bundled. Do not also
-insert `id: better-sidebar` in the profile patch — that id already comes from
+Current pin: `dsh-better-sidebar@0.15.0` (supports official DSH 0.1.1-rc.1 / rc.2).
+The official dsh baseline provides native multimodal DeepSeek input and
+`read_image`, so ModLens is not bundled. Do not also insert
+`id: better-sidebar` in the profile patch — that id already comes from
 the package's own `dsh.bundle.patch`.
