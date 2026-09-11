@@ -1,0 +1,55 @@
+/* Visual spec mirrors deepsuite @deepseek/ui Tooltip.css (size m, no arrow),
+   except padding tightened 6/12 -> 3/7, type 14/22 -> 13/20, radius 10 -> 8.
+   The bubble is a theme-aware elevated surface: the same layer fill and
+   elevation token as the other floating cards keep clipped stats previews and
+   regular tooltips legible in both light and dark themes, where the dark
+   tooltip plate left dark ink on a dark plate. The hairline stroke rides the
+   elevation token (design-platform.css), so the bubble states `border: 0`
+   rather than double-drawing an outline. Behavior (fixed positioning off the
+   anchor rect) is local — the upstream Floating stack is intentionally not
+   vendored. */
+
+.bubble {
+  position: fixed;
+  z-index: 100;
+  /* Fixed-position shrink-to-fit measures only the space from `left` to the
+     viewport edge, so anchors near the right edge would wrap early;
+     max-content sizes by the label alone, capped at half the viewport. */
+  width: max-content;
+  max-width: 50vw;
+  padding: 3px 7px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-elevation-panel);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-line;
+  /* Unbreakable tokens (URLs, paths) must not push past max-width. */
+  overflow-wrap: break-word;
+  pointer-events: none;
+  animation: tooltip-in 150ms var(--ds-ease-in-out);
+}
+
+.bubble[data-side='right'] {
+  transform: translateY(-50%);
+}
+
+.bubble[data-side='bottom'] {
+  transform: translateX(-50%);
+}
+
+.bubble[data-side='top'] {
+  transform: translate(-50%, -100%);
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    animation: none;
+  }
+}

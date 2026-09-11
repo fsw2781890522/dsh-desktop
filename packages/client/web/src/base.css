@@ -1,0 +1,77 @@
+/* Shell-owned mount defaults. Theme tokens arrive with the ui-theme client
+ * plugin before the loader roster activates. */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  /* The WebView must expose the native window surface: the desktop shell
+     supplies the backdrop (Windows Acrylic) the sidebar glass samples. An
+     opaque page background here would turn every CSS backdrop-filter into a
+     blur of one flat color and hide the compositor's window behind the app. */
+  background: transparent;
+}
+
+body {
+  font-family: var(
+    --dsw-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    'Helvetica Neue',
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+  /* Grayscale antialiasing over subpixel rendering: WebKit/Blink and the
+     Firefox macOS equivalent; other engines ignore both lines. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--dsw-alias-label-primary, #0f1115);
+  /* The conversation root, the right panel, and the sidebar column paint
+     their own alias surfaces; keeping body itself clear is what lets the
+     native window backdrop reach the glass. */
+  background: transparent;
+  /* Supporting browsers insert CJK/Latin spacing in inherited prose. */
+  text-autospace: normal;
+}
+
+code,
+pre,
+[data-diff],
+[data-read],
+[data-search],
+[data-terminal] {
+  /* Literal payloads retain source spacing and column alignment. */
+  text-autospace: no-autospace;
+}
+
+/* Form controls don't inherit the body font (UA sheets pin their families —
+   Chrome buttons fall back to Arial, textareas to monospace), so the app
+   stack is re-applied to them explicitly, as upstream's global reset does. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* Electron product window: one glass plate (title band + sidebar + thin
+   right/bottom/left moat). Three stage corners use the card radius; the
+   bottom-right corner is `card-radius − inset`. Maximized windows square
+   the plate only; the session card keeps its radii. */
+html.dsh-desktop {
+  --dsh-desktop-caption-height: env(titlebar-area-height, 38px);
+  --dsh-desktop-stage-inset: 6px;
+  --dsh-desktop-window-radius: 12px;
+  --dsh-desktop-card-radius: 12px;
+  --dsh-desktop-stage-radius: max(0px, calc(var(--dsh-desktop-card-radius) - var(--dsh-desktop-stage-inset)));
+}
+
+html.dsh-desktop-maximized {
+  --dsh-desktop-window-radius: 0px;
+}
