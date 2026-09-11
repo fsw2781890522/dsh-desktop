@@ -1,90 +1,54 @@
-# DeepSeek Harness
+# DeepSeek Harness Desktop
 
-[English](README.md) | 中文
+这是个人维护的 **Windows 桌面端**，不是 DeepSeek 官方安装包。
 
-DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
+当前构建基于官方 Electron 壳 [`apps/desktop`](https://github.com/deepseek-ai/deepseek-harness/tree/master/apps/desktop)，版本身份与 `@deepseek-ai/dsh` 同为 **0.1.5-rc.2**。已不再使用 Tauri，也不再顺延个人 0.2 / 0.3 / 0.4 版本号。
 
-它构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。
+[English](README.en.md)
 
-文档：[https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
+![Windows 上的 DeepSeek Harness 桌面端](apps/desktop/docs/window.png)
 
-## 桌面端
+## 下载
 
-Windows Electron 壳使用官方 `0.1.5-rc.2` 版本号：原生标题栏按钮、环抱式毛玻璃侧栏，以及浮在底板上的会话舞台。
+安装包在 GitHub Release：**[v0.1.5-rc.2](https://github.com/fsw2781890522/dsh-desktop/releases/tag/v0.1.5-rc.2)**
 
-![DeepSeek Harness 桌面端](apps/desktop/docs/window.png)
+- 文件：`deepseek-harness-0.1.5-rc.2-win-x64.exe`（Windows x64 NSIS）
+- 未走官方 EV 签名通道，SmartScreen 可能提示「未知发布者」
+- 用户数据仍在 `~/.dsh`，与 CLI / 旧桌面端共用设置、凭证和会话
 
-## 开发者预览
+## 这一版实际有什么
 
-DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
+相对官方 Desktop 源码，这个快照多了个人界面与设置，而不是再叠一层 Tauri WebView：
 
-运行本项目前，请阅读[安全说明](SAFETY.zh.md)。
+- **窗口：** 隐藏标题栏应用名和图标，保留 Windows 原生最小化 / 最大化 / 关闭；深色界面用白色按钮字形，浅色用灰色；标题栏可拖动
+- **环抱式毛玻璃：** 标题栏与侧栏连成一块底板，会话区域用不透明圆角卡片浮在上面（右下角半径更小）；最大化时窗口外角变直角，会话卡片圆角保留
+- **图标：** 官方白鲸、黑底圆角方标
+- **设置：** 侧栏透明度、代理端口（写入官方 `dsh-http-proxy` 策略，不是先直连再回退）、Agent / Subagent 默认模型分开配置
+- **开发态：** 继续用本机 `~/.dsh`，不会默认写进 `.desktop-build/development/home`
 
-<a id="run"></a>
+官方 0.1.5 已经自带的能力不再重复实现：轮次导航、过程折叠、右侧栏、多模态与 `read_image`。本仓库也不再捆绑 `dsh-better-sidebar`、ModLens 或 Anchored Standard。
 
-## 运行
+## 从源码跑（可选）
 
-### 通过 `npm` 运行
+本仓库的 `main` 是官方 0.1.5-rc.2 工作树加上面这些桌面改动。需要 Node.js 22+ 与 pnpm：
 
-安装 `Node.js`，然后运行：
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-该命令默认会在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时还会用默认浏览器打开页面。通过 SSH 启动时只打印宿主机 URL，因为本地转发地址由 SSH 客户端或编辑器持有。传入 `--no-open` 可仅运行服务器而不打开浏览器。详见 [Web UI 指南](docs/user/guide/index.zh.md)。
-
-<a id="run-from-source"></a>
-
-### 从源码运行
-
-如需从仓库源码运行：
-
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+```powershell
 pnpm install
-pnpm run build
-pnpm dsh web
+pnpm run start:desktop
 ```
 
-`pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+打 Windows 安装包（本机未签名）：
 
-## 社区与支持
+```powershell
+$env:DSH_DESKTOP_APP_ID = 'ai.deepseek.harness'
+$env:DSH_DESKTOP_ALLOW_UNSIGNED = '1'
+$env:DSH_DESKTOP_AUTO_UPDATE_ENV = 'test'
+$env:DOWNLOAD_TEST_ORIGIN = 'https://github.com'
+pnpm --filter @deepseek-ai/dsh-desktop run package:win:x64
+```
 
-- 通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
-- 为你的插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题，便于被发现。
-- 欢迎加入 DeepSeek Harness 企微群：扫码添加企微小助手并填写入群问卷，完成后小助手会邀请你入群。
+产物在 `apps/desktop/.desktop-build/targets/win-x64/artifacts/`。
 
-<table>
-  <thead>
-    <tr>
-      <th align="center">企微小助手</th>
-      <th align="center">入群问卷</th>
-      <th align="center">微信公众号</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center"><img src="https://cdn.deepseek.com/harness/readme/community-wecom-assistant.png" alt="DeepSeek Harness 企微小助手二维码" width="180" height="180"></td>
-      <td align="center"><a href="https://trtgsjkv6r.feishu.cn/share/base/form/shrcnIt5twSVdLGD52KJBckGCgg"><img src="https://cdn.deepseek.com/harness/readme/community-wecom-survey.png" alt="DeepSeek Harness 入群问卷二维码" width="180" height="180"></a></td>
-      <td align="center"><img src="https://cdn.deepseek.com/harness/readme/community-wechat-official-account.png" alt="DeepSeek Harness 团队微信公众号二维码" width="180" height="180"></td>
-    </tr>
-  </tbody>
-</table>
+## 分支
 
-## 参与贡献
-
-参见 [CONTRIBUTING.md](CONTRIBUTING.zh.md)。
-
-## 开发
-
-请先阅读[开发指南](docs/development.zh.md)与[架构文档](docs/architecture.zh.md)。
-
-面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
-
-## 许可证
-
-[MIT](LICENSE)
-
-第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+只维护 **`main`**（默认，当前桌面快照）和 **`dev`**。不要在这个仓库开 Dependabot 或功能分支。

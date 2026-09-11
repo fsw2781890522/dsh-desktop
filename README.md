@@ -1,69 +1,54 @@
-# DeepSeek Harness
+# DeepSeek Harness Desktop
 
-English | [中文](README.zh.md)
+这是个人维护的 **Windows 桌面端**，不是 DeepSeek 官方安装包。
 
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
+当前构建基于官方 Electron 壳 [`apps/desktop`](https://github.com/deepseek-ai/deepseek-harness/tree/master/apps/desktop)，版本身份与 `@deepseek-ai/dsh` 同为 **0.1.5-rc.2**。已不再使用 Tauri，也不再顺延个人 0.2 / 0.3 / 0.4 版本号。
 
-It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
+[English](README.en.md)
 
-Documentation: [https://deepseek-harness.github.io/deepseek-harness/](https://deepseek-harness.github.io/deepseek-harness/)
+![Windows 上的 DeepSeek Harness 桌面端](apps/desktop/docs/window.png)
 
-## Desktop
+## 下载
 
-Windows Electron shell on the official `0.1.5-rc.2` identity: native caption buttons, an embracing glass sidebar, and the session stage above the plate.
+安装包在 GitHub Release：**[v0.1.5-rc.2](https://github.com/fsw2781890522/dsh-desktop/releases/tag/v0.1.5-rc.2)**
 
-![DeepSeek Harness Desktop](apps/desktop/docs/window.png)
+- 文件：`deepseek-harness-0.1.5-rc.2-win-x64.exe`（Windows x64 NSIS）
+- 未走官方 EV 签名通道，SmartScreen 可能提示「未知发布者」
+- 用户数据仍在 `~/.dsh`，与 CLI / 旧桌面端共用设置、凭证和会话
 
-## Developer preview
+## 这一版实际有什么
 
-DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
+相对官方 Desktop 源码，这个快照多了个人界面与设置，而不是再叠一层 Tauri WebView：
 
-Review the [safety notice](SAFETY.md) before running the project.
+- **窗口：** 隐藏标题栏应用名和图标，保留 Windows 原生最小化 / 最大化 / 关闭；深色界面用白色按钮字形，浅色用灰色；标题栏可拖动
+- **环抱式毛玻璃：** 标题栏与侧栏连成一块底板，会话区域用不透明圆角卡片浮在上面（右下角半径更小）；最大化时窗口外角变直角，会话卡片圆角保留
+- **图标：** 官方白鲸、黑底圆角方标
+- **设置：** 侧栏透明度、代理端口（写入官方 `dsh-http-proxy` 策略，不是先直连再回退）、Agent / Subagent 默认模型分开配置
+- **开发态：** 继续用本机 `~/.dsh`，不会默认写进 `.desktop-build/development/home`
 
-## Run
+官方 0.1.5 已经自带的能力不再重复实现：轮次导航、过程折叠、右侧栏、多模态与 `read_image`。本仓库也不再捆绑 `dsh-better-sidebar`、ModLens 或 Anchored Standard。
 
-### Run from `npm`
+## 从源码跑（可选）
 
-Install `Node.js`, then run:
+本仓库的 `main` 是官方 0.1.5-rc.2 工作树加上面这些桌面改动。需要 Node.js 22+ 与 pnpm：
 
-```sh
-npx @deepseek-ai/dsh web
-```
-
-The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
-
-### Run from source
-
-To run from a repository checkout:
-
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+```powershell
 pnpm install
-pnpm run build
-pnpm dsh web
+pnpm run start:desktop
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+打 Windows 安装包（本机未签名）：
 
-## Community and support
+```powershell
+$env:DSH_DESKTOP_APP_ID = 'ai.deepseek.harness'
+$env:DSH_DESKTOP_ALLOW_UNSIGNED = '1'
+$env:DSH_DESKTOP_AUTO_UPDATE_ENV = 'test'
+$env:DOWNLOAD_TEST_ORIGIN = 'https://github.com'
+pnpm --filter @deepseek-ai/dsh-desktop run package:win:x64
+```
 
-- Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/Ycq5dCaS4">DeepSeek Harness Discord community</a>.
+产物在 `apps/desktop/.desktop-build/targets/win-x64/artifacts/`。
 
-## Contributing
+## 分支
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Development
-
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
-
-For agents, follow [AGENTS.md](AGENTS.md).
-
-## License
-
-[MIT](LICENSE)
-
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+只维护 **`main`**（默认，当前桌面快照）和 **`dev`**。不要在这个仓库开 Dependabot 或功能分支。
