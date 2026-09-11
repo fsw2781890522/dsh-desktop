@@ -40,7 +40,7 @@
     "@deepseek-ai/dsh-brand": "workspace:^",
     "@deepseek-ai/dsh-util-crypto": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
-    "ws": "^8.21.0"
+    "ws": "^8.21.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
